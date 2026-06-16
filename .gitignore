@@ -1,8 +1,3 @@
-# Graphify artifacts and scratch scripts
-graphify-out/
-run_ast.py
-run_merge.py
-run_build.py
 Context.md
 
 # Dependencies
