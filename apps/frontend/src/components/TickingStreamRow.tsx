@@ -2,6 +2,13 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, ArrowDownLeft, ShieldCheck, RefreshCw } from "lucide-react";
+import { Transaction } from "@mysten/sui/transactions";
+import { useSignAndExecuteTransaction } from "@mysten/dapp-kit";
+
+const PACKAGE_ID = "0xfeded63bda28be37a34d937fe8dfe8c294596a26f4c9805128812edfd085c025";
+const DEEPBOOK_PREDICT_POOL_ID = "0x3b1cfc560205d12a23bb800bc19e342718a3d58de41bb33cf517d925e01ba062";
+const OPTION_USDC_TYPE = "0x0111111111111111111111111111111111111111111111111111111111111111::db_usdc::DB_USDC";
+const ORACLE_SVI_TESTNET_OBJECT_ID = "0xORACLE_SVI_TESTNET_OBJECT_ID";
 
 interface StreamConfig {
   id: string;
@@ -17,6 +24,52 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
   const [balance, setBalance] = useState(0);
   const startTimeRef = useRef<number | null>(null);
   const initialValueRef = useRef<number>(0);
+  
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+
+  const executeClaimTransaction = async (streamObjectId: string) => {
+    const tx = new Transaction();
+
+    tx.moveCall({
+      target: `${PACKAGE_ID}::peach_stream::claim_stream`,
+      arguments: [
+        tx.object(streamObjectId),                     // Target Shared Stream Object
+        tx.object(DEEPBOOK_PREDICT_POOL_ID),          // DeepBook Predict Pool ID
+        tx.object(ORACLE_SVI_TESTNET_OBJECT_ID),       // OracleSVI Object Pointer
+        tx.object("0x6"),                              // System Clock
+      ],
+      typeArguments: [OPTION_USDC_TYPE],
+    });
+
+    try {
+      await signAndExecuteTransaction({ transaction: tx });
+      console.log("Claim Successful");
+    } catch (e) {
+      console.error("Claim Failed", e);
+    }
+  };
+
+  const executeCancelTransaction = async (streamObjectId: string) => {
+    const tx = new Transaction();
+
+    tx.moveCall({
+      target: `${PACKAGE_ID}::peach_stream::cancel_stream`,
+      arguments: [
+        tx.object(streamObjectId),                     // Shared Object consumed by value
+        tx.object(DEEPBOOK_PREDICT_POOL_ID),          
+        tx.object(ORACLE_SVI_TESTNET_OBJECT_ID),   
+        tx.object("0x6"),                              
+      ],
+      typeArguments: [OPTION_USDC_TYPE],
+    });
+
+    try {
+      await signAndExecuteTransaction({ transaction: tx });
+      console.log("Cancel Successful");
+    } catch (e) {
+      console.error("Cancel Failed", e);
+    }
+  };
   
   useEffect(() => {
     // Reset start time on effect run
@@ -80,8 +133,26 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
           <div className="text-xl text-white font-mono tracking-tight">
             ${balance.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
           </div>
-          <div className="text-xs text-[#8a8690] mt-1">
+          <div className="text-xs text-[#8a8690] mt-1 mb-3">
             of ${config.targetValue.toLocaleString()}
+          </div>
+          <div className="flex justify-end gap-2">
+            {(config.type === "inbound" || config.type === "self") && (
+              <button 
+                onClick={() => executeClaimTransaction(config.id)}
+                className="px-3 py-1 bg-[#FD8566]/10 text-[#FD8566] text-xs font-medium rounded hover:bg-[#FD8566]/20 transition-colors"
+              >
+                Claim
+              </button>
+            )}
+            {(config.type === "outbound" || config.type === "self") && (
+              <button 
+                onClick={() => executeCancelTransaction(config.id)}
+                className="px-3 py-1 bg-white/5 text-white/70 text-xs font-medium rounded hover:bg-white/10 transition-colors"
+              >
+                Cancel
+              </button>
+            )}
           </div>
         </div>
       </div>
