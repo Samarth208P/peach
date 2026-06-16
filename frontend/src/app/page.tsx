@@ -2,13 +2,11 @@
 
 import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import AnimatedHeroBackground from "@/components/AnimatedHeroBackground";
 import PeachTextLogo from "@/components/PeachTextLogo";
-import LandingDocs from "@/components/LandingDocs";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(useGSAP, ScrollTrigger);
@@ -89,8 +87,8 @@ export default function LandingPage() {
         }
       });
 
-      gsap.utils.toArray(".pin-card").forEach((card: any, i) => {
-        gsap.fromTo(card,
+      gsap.utils.toArray(".pin-card").forEach((card: unknown) => {
+        gsap.fromTo(card as HTMLElement,
           { y: 150, opacity: 0, scale: 0.95 },
           {
             y: 0,
@@ -166,9 +164,9 @@ export default function LandingPage() {
             <a href="#infrastructure" className="text-[13px] font-medium text-[#8a8690] hover:text-white transition-all duration-300 px-5 py-2.5 rounded-full hover:bg-white/[0.04]">
               Infrastructure
             </a>
-            <a href="#docs" className="text-[13px] font-medium text-[#8a8690] hover:text-white transition-all duration-300 px-5 py-2.5 rounded-full hover:bg-white/[0.04]">
+            <Link href="/docs" className="text-[13px] font-medium text-[#8a8690] hover:text-white transition-all duration-300 px-5 py-2.5 rounded-full hover:bg-white/[0.04]">
               Documentation
-            </a>
+            </Link>
           </div>
 
           {/* CTA */}
@@ -206,9 +204,9 @@ export default function LandingPage() {
             <Link href="/dashboard" className="px-10 py-5 bg-white text-black font-medium text-[15px] rounded-full transition-all duration-500 hover:scale-[1.03] hover:shadow-[0_0_40px_rgba(255,255,255,0.3)]">
               Start Streaming
             </Link>
-            <a href="#docs" className="px-10 py-5 bg-transparent border border-white/10 text-white font-medium text-[15px] rounded-full hover:bg-white/5 transition-colors duration-300">
+            <Link href="/docs" className="px-10 py-5 bg-transparent border border-white/10 text-white font-medium text-[15px] rounded-full hover:bg-white/5 transition-colors duration-300">
               Read the Whitepaper
-            </a>
+            </Link>
           </div>
         </div>
       </main>
@@ -312,8 +310,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <LandingDocs />
-
       {/* Premium Minimal Footer */}
       <footer className="w-full border-t border-white/[0.05] relative z-10 overflow-hidden">
         {/* Background Image with Smooth Top Fade */}
@@ -334,7 +330,7 @@ export default function LandingPage() {
             
             <div className="flex flex-col gap-5">
               <h4 className="text-white font-medium mb-3">Protocol</h4>
-              <a href="#" className="text-[#8a8690] hover:text-white transition-colors">Documentation</a>
+              <Link href="/docs" className="text-[#8a8690] hover:text-white transition-colors">Documentation</Link>
               <a href="#" className="text-[#8a8690] hover:text-white transition-colors">Smart Contracts</a>
               <a href="#" className="text-[#8a8690] hover:text-white transition-colors">Audit Reports</a>
             </div>
