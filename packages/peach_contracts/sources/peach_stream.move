@@ -10,6 +10,8 @@ module peach_contracts::peach_stream {
         recipient: address,
         deposit_amount: u64,
         premium_amount: u64,
+        start_time_ms: u64,
+        end_time_ms: u64,
     }
 
     /// The Stream object representing the active streaming agreement
@@ -17,6 +19,8 @@ module peach_contracts::peach_stream {
         id: UID,
         balance: Balance<SUI>,
         recipient: address,
+        start_time_ms: u64,
+        end_time_ms: u64,
     }
 
     /// Creates a new stream and extracts 1% of the total SUI as premium.
@@ -25,6 +29,8 @@ module peach_contracts::peach_stream {
     public fun create_stream(
         mut deposit: Coin<SUI>,
         recipient: address,
+        start_time_ms: u64,
+        end_time_ms: u64,
         ctx: &mut TxContext
     ): (Stream, Coin<SUI>) {
         let total_value = coin::value(&deposit);
@@ -37,6 +43,8 @@ module peach_contracts::peach_stream {
             id: object::new(ctx),
             balance: coin::into_balance(deposit),
             recipient,
+            start_time_ms,
+            end_time_ms,
         };
         
         // Emit the event so the frontend indexer can track real PTB execution logs
@@ -45,6 +53,8 @@ module peach_contracts::peach_stream {
             recipient,
             deposit_amount: total_value,
             premium_amount: premium_value,
+            start_time_ms,
+            end_time_ms,
         });
         
         // Return both the stream object and the 1% premium Coin

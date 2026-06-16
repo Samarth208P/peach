@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, ArrowDownLeft, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, ArrowDownLeft, ShieldCheck, RefreshCw } from "lucide-react";
 
 interface StreamConfig {
   id: string;
-  type: "inbound" | "outbound";
+  type: "inbound" | "outbound" | "self";
   targetValue: number;
   durationSeconds: number;
   elapsedSeconds: number;
@@ -54,8 +54,14 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
       
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-xl ${config.type === 'inbound' ? 'bg-green-500/10 text-green-400' : 'bg-[#FD8566]/10 text-[#FD8566]'}`}>
-            {config.type === 'inbound' ? <ArrowDownLeft size={20} /> : <ArrowUpRight size={20} />}
+          <div className={`p-2 rounded-xl ${
+            config.type === 'inbound' ? 'bg-green-500/10 text-green-400' : 
+            config.type === 'self' ? 'bg-blue-500/10 text-blue-400' :
+            'bg-[#FD8566]/10 text-[#FD8566]'
+          }`}>
+            {config.type === 'inbound' ? <ArrowDownLeft size={20} /> : 
+             config.type === 'self' ? <RefreshCw size={20} /> :
+             <ArrowUpRight size={20} />}
           </div>
           <div>
             <div className="flex items-center gap-2">

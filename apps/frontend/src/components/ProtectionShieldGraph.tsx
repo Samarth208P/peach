@@ -14,6 +14,8 @@ interface DataPoint {
 
 export default function ProtectionShieldGraph() {
   const [data, setData] = useState<DataPoint[]>([]);
+  const initialPriceRef = React.useRef<number | null>(null);
+  const [gain, setGain] = useState<{ amount: number, percent: number } | null>(null);
   const suiClient = useSuiClient();
 
   useEffect(() => {
@@ -34,6 +36,14 @@ export default function ProtectionShieldGraph() {
         const currentPrice = await dbClient.midPrice(poolKey);
         // The Floor is dynamic based on the Option contract, but for demo we set it slightly below spot
         const floorPrice = currentPrice * 0.95; 
+
+        if (initialPriceRef.current === null) {
+          initialPriceRef.current = currentPrice;
+        } else {
+          const diff = currentPrice - initialPriceRef.current;
+          const pct = (diff / initialPriceRef.current) * 100;
+          setGain({ amount: diff, percent: pct });
+        }
 
         if (active) {
           setData(prev => {
@@ -66,7 +76,14 @@ export default function ProtectionShieldGraph() {
     <div className="w-full h-full min-h-[300px] flex flex-col relative group">
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6">
         <div>
-          <h3 className="text-white font-medium font-display">Protection Shield</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-white font-medium font-display">Protection Shield</h3>
+            {gain && (
+              <span className={`text-xs font-mono px-2 py-0.5 rounded-md ${gain.amount >= 0 ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                {gain.amount >= 0 ? '+' : ''}{gain.amount.toFixed(4)} USDC ({gain.percent >= 0 ? '+' : ''}{gain.percent.toFixed(2)}%)
+              </span>
+            )}
+          </div>
           <p className="text-[#8a8690] text-sm">DeepBook V3 Live Order Book</p>
         </div>
         <div className="flex items-center gap-4 text-xs font-mono shrink-0">

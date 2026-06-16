@@ -4,7 +4,7 @@ import React from "react";
 import { Terminal, ExternalLink } from "lucide-react";
 import { useSuiClientQuery } from '@mysten/dapp-kit';
 
-const PACKAGE_ID = "0x25219b630a85a209ead80522fde59636ee514259208586e8475a176c8510672c";
+const PACKAGE_ID = "0x49c002ce2aadfa23c699394e44be190188a9ec6ea0d2b8b3c23dce7779904d22";
 
 export default function MicroPremiumLedger() {
   const { data, isPending } = useSuiClientQuery(
@@ -42,7 +42,7 @@ export default function MicroPremiumLedger() {
               // Convert mist to SUI
               const premiumSUI = (Number(parsedJson.premium_amount) / 1_000_000_000).toFixed(3);
               const txHash = `${event.id.txDigest.substring(0, 6)}...${event.id.txDigest.substring(event.id.txDigest.length - 4)}`;
-              const explorerLink = `https://suivision.xyz/txblock/${event.id.txDigest}?network=testnet`;
+              const explorerLink = `https://testnet.suivision.xyz/txblock/${event.id.txDigest}`;
 
               return (
                 <div 

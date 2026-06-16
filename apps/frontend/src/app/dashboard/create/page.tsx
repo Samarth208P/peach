@@ -6,11 +6,13 @@ import { Transaction } from "@mysten/sui/transactions";
 import { useRouter } from "next/navigation";
 import { Shield, ArrowRight, Zap, CheckCircle2 } from "lucide-react";
 
-const PACKAGE_ID = "0x25219b630a85a209ead80522fde59636ee514259208586e8475a176c8510672c";
+const PACKAGE_ID = "0x49c002ce2aadfa23c699394e44be190188a9ec6ea0d2b8b3c23dce7779904d22";
 
 export default function CreateStreamPage() {
   const [amount, setAmount] = useState("10");
   const [recipient, setRecipient] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [isProtected, setIsProtected] = useState(true);
   const [isExecuting, setIsExecuting] = useState(false);
   
@@ -25,7 +27,7 @@ export default function CreateStreamPage() {
   }, [currentAccount, router]);
 
   const handleCreate = async () => {
-    if (!currentAccount || !amount || !recipient) return;
+    if (!currentAccount || !amount || !recipient || !startDate || !endDate) return;
     setIsExecuting(true);
 
     try {
@@ -34,9 +36,17 @@ export default function CreateStreamPage() {
       const amountInMist = BigInt(parseFloat(amount) * 1_000_000_000);
       const [deposit] = txb.splitCoins(txb.gas, [amountInMist]);
 
+      const startTimeMs = new Date(startDate).getTime();
+      const endTimeMs = new Date(endDate).getTime();
+
       const [stream, premium] = txb.moveCall({
         target: `${PACKAGE_ID}::peach_stream::create_stream`,
-        arguments: [deposit, txb.pure.address(recipient)]
+        arguments: [
+          deposit, 
+          txb.pure.address(recipient),
+          txb.pure.u64(startTimeMs),
+          txb.pure.u64(endTimeMs)
+        ]
       });
 
       if (isProtected) {
@@ -105,6 +115,27 @@ export default function CreateStreamPage() {
                   </div>
                 </div>
               </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-[#8a8690] mb-2">Start Time</label>
+                  <input 
+                    type="datetime-local" 
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full bg-[#060608] border border-white/[0.08] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FD8566]/50 transition-colors [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-[#8a8690] mb-2">End Time</label>
+                  <input 
+                    type="datetime-local" 
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full bg-[#060608] border border-white/[0.08] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FD8566]/50 transition-colors [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -154,7 +185,7 @@ export default function CreateStreamPage() {
 
             <button 
               onClick={handleCreate}
-              disabled={isExecuting || !currentAccount || !amount || !recipient}
+              disabled={isExecuting || !currentAccount || !amount || !recipient || !startDate || !endDate}
               className="w-full bg-[#FD8566] hover:bg-[#ff957a] disabled:opacity-50 text-white font-medium rounded-xl py-4 flex items-center justify-center gap-2 transition-colors shadow-[0_0_20px_rgba(253,133,102,0.3)]"
             >
               {isExecuting ? (

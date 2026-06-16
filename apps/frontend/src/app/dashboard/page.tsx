@@ -11,7 +11,7 @@ import MicroPremiumLedger from "@/components/MicroPremiumLedger";
 import { Plus, LayoutDashboard, Wallet, Activity } from "lucide-react";
 import { useCurrentAccount, useSuiClientQuery } from "@mysten/dapp-kit";
 
-const PACKAGE_ID = "0x25219b630a85a209ead80522fde59636ee514259208586e8475a176c8510672c";
+const PACKAGE_ID = "0x49c002ce2aadfa23c699394e44be190188a9ec6ea0d2b8b3c23dce7779904d22";
 
 export default function DashboardPage() {
   const currentAccount = useCurrentAccount();
@@ -39,19 +39,27 @@ export default function DashboardPage() {
   // Parse real streams
   const activeStreams = streamsData?.data?.map((obj: any) => {
     const fields = obj.data?.content?.fields;
+    
+    const start = Number(fields?.start_time_ms) || 0;
+    const end = Number(fields?.end_time_ms) || 0;
+    const durationSeconds = end > start ? (end - start) / 1000 : 30 * 24 * 60 * 60;
+    const elapsedSeconds = start > 0 ? Math.max(0, (Date.now() - start) / 1000) : 0;
+
     return {
       id: obj.data?.objectId,
-      type: "outbound" as const,
+      type: fields?.recipient === currentAccount?.address ? "self" : "outbound",
       // SUI has 9 decimals
       targetValue: fields?.balance ? Number(fields.balance) / 1_000_000_000 : 0,
-      durationSeconds: 30 * 24 * 60 * 60, // 30 days default for demo
-      elapsedSeconds: 0, 
+      durationSeconds: durationSeconds,
+      elapsedSeconds: elapsedSeconds, 
       sender: currentAccount?.address || "",
       receiver: fields?.recipient || ""
     };
   }) || [];
 
   const totalVolume = activeStreams.reduce((acc, curr) => acc + curr.targetValue, 0);
+  const outCount = activeStreams.length; // owned streams are outbound
+  const inCount = activeStreams.filter(s => s.receiver === currentAccount?.address).length;
 
 
   return (
@@ -71,7 +79,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {[
             { label: "Total Streamed Volume", value: `${totalVolume.toFixed(2)} SUI`, spark: "Active Testnet" },
-            { label: "Active Vectors", value: `${activeStreams.length} Out / 0 In`, spark: "Stable" },
+            { label: "Active Vectors", value: `${outCount} Out / ${inCount} In`, spark: "Stable" },
             { label: "Net Insured Capital", value: `${(totalVolume * 0.99).toFixed(2)} SUI`, spark: "100% Protected" },
             { label: "Micro-Premiums (1%)", value: `${(totalVolume * 0.01).toFixed(2)} SUI`, spark: "Routed to DeepBook" }
           ].map((metric, i) => (
