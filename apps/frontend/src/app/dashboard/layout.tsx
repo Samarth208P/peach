@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Image from "next/image";
 import AnimatedLogo from "@/components/AnimatedLogo";
 
 const navigation = [
@@ -26,10 +27,9 @@ export default function DashboardLayout({
 
       {/* Sidebar - Glassmorphism */}
       <aside className="w-64 border-r border-white/5 bg-surface-1/40 backdrop-blur-2xl flex flex-col h-screen sticky top-0 z-20">
-        <div className="p-8">
-          <Link href="/" className="flex items-center gap-3 font-display font-medium text-lg text-white">
-            <AnimatedLogo className="w-6 h-6" />
-            Peach
+        <div className="p-8 flex justify-center w-full">
+          <Link href="/" className="flex items-center">
+            <Image src="/peach_text.svg" alt="Peach" width={110} height={32} className="opacity-90 mt-0.5" />
           </Link>
         </div>
 

@@ -103,44 +103,40 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
   const percentage = Math.min((balance / config.targetValue) * 100, 100);
 
   return (
-    <div className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl p-4 flex flex-col gap-4 hover:bg-white/[0.04] transition-colors duration-300">
+    <div className="w-full bg-[#060608] border border-white/5 rounded-2xl p-5 flex flex-col gap-5 hover:bg-[#141418] hover:scale-[1.005] transition-all duration-500 ease-out">
       
       <div className="flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-xl ${
-            config.type === 'inbound' ? 'bg-green-500/10 text-green-400' : 
-            config.type === 'self' ? 'bg-blue-500/10 text-blue-400' :
-            'bg-[#FD8566]/10 text-[#FD8566]'
-          }`}>
-            {config.type === 'inbound' ? <ArrowDownLeft size={20} /> : 
-             config.type === 'self' ? <RefreshCw size={20} /> :
-             <ArrowUpRight size={20} />}
+        <div className="flex items-center gap-4">
+          <div className="p-2.5 rounded-xl bg-[#0d0d10] border border-white/5 text-[#8a8690]">
+            {config.type === 'inbound' ? <ArrowDownLeft size={18} strokeWidth={1.5} /> : 
+             config.type === 'self' ? <RefreshCw size={18} strokeWidth={1.5} /> :
+             <ArrowUpRight size={18} strokeWidth={1.5} />}
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-white font-medium">SUI Stream</span>
-              <span className="bg-[#FD8566] text-black text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 uppercase tracking-wide">
-                <ShieldCheck size={12} /> Protected
+            <div className="flex items-center gap-3">
+              <span className="text-[#e8e4df] text-sm font-medium">SUI Stream</span>
+              <span className="bg-[#141418] border border-[#FF8B5E]/20 text-[#FF8B5E] text-[9px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 uppercase tracking-widest">
+                <ShieldCheck size={10} /> Protected
               </span>
             </div>
-            <div className="text-xs text-[#8a8690] font-mono mt-1">
+            <div className="text-[11px] text-[#8a8690]/70 font-mono mt-1 tracking-wider">
               {config.sender.substring(0, 6)}...{config.sender.slice(-4)} → {config.receiver.substring(0, 6)}...{config.receiver.slice(-4)}
             </div>
           </div>
         </div>
 
         <div className="text-right">
-          <div className="text-xl text-white font-mono tracking-tight">
-            ${balance.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+          <div className="text-xl text-[#e8e4df] font-mono tracking-tight">
+            {balance.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })} SUI
           </div>
-          <div className="text-xs text-[#8a8690] mt-1 mb-3">
-            of ${config.targetValue.toLocaleString()}
+          <div className="text-[11px] text-[#8a8690] mt-1 mb-3">
+            of {config.targetValue.toLocaleString()} SUI Total
           </div>
           <div className="flex justify-end gap-2">
             {(config.type === "inbound" || config.type === "self") && (
               <button 
                 onClick={() => executeClaimTransaction(config.id)}
-                className="px-3 py-1 bg-[#FD8566]/10 text-[#FD8566] text-xs font-medium rounded hover:bg-[#FD8566]/20 transition-colors"
+                className="px-4 py-1.5 bg-[#FF8B5E] text-[#060608] text-xs font-semibold tracking-wide rounded-lg hover:bg-[#FF8B5E]/90 transition-colors shadow-[0_0_15px_rgba(255,139,94,0.15)]"
               >
                 Claim
               </button>
@@ -148,7 +144,7 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
             {(config.type === "outbound" || config.type === "self") && (
               <button 
                 onClick={() => executeCancelTransaction(config.id)}
-                className="px-3 py-1 bg-white/5 text-white/70 text-xs font-medium rounded hover:bg-white/10 transition-colors"
+                className="px-4 py-1.5 bg-[#0d0d10] border border-white/5 text-[#e8e4df] text-xs font-medium rounded-lg hover:bg-[#141418] transition-colors"
               >
                 Cancel
               </button>
@@ -157,9 +153,9 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
         </div>
       </div>
 
-      <div className="w-full h-1.5 bg-black rounded-full overflow-hidden relative">
+      <div className="w-full h-1 bg-[#141418] rounded-full overflow-hidden relative">
         <div 
-          className="absolute top-0 left-0 h-full bg-gradient-to-r from-white/20 to-[#FD8566] rounded-full transition-all duration-75 ease-linear"
+          className="absolute top-0 left-0 h-full bg-[#FF8B5E] rounded-full transition-all duration-75 ease-linear shadow-[0_0_8px_rgba(255,139,94,0.4)]"
           style={{ width: `${percentage}%` }}
         />
       </div>

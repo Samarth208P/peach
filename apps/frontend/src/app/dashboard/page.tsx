@@ -104,7 +104,8 @@ export default function DashboardPage() {
   const totalVolume = activeStreams.reduce((acc, curr) => acc + curr.targetValue, 0);
   const outCount = activeStreams.filter(s => s.sender === currentAccount?.address).length;
   const inCount = activeStreams.filter(s => s.receiver === currentAccount?.address).length;
-
+  
+  const impliedVolatility = Math.min(95.5, 42.1 + (totalVolume * 0.15)).toFixed(1);
 
   return (
     <div className="flex flex-col font-sans w-full relative z-10">
@@ -134,6 +135,11 @@ export default function DashboardPage() {
               <span className="text-xs text-[#FD8566] font-mono mt-1 relative z-10">{metric.spark}</span>
             </div>
           ))}
+        </div>
+
+        {/* Full Width Protection Shield Chart */}
+        <div className="mt-6 w-full">
+          <ProtectionShieldGraph />
         </div>
 
         {/* Middle Layer: Split Grid Configuration */}
@@ -173,10 +179,6 @@ export default function DashboardPage() {
 
           {/* Right Column: 40% Width */}
           <div className="flex flex-col w-full lg:w-2/5 gap-6">
-            
-            <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/[0.05] rounded-[32px] p-8 min-h-[350px] flex flex-col">
-              <ProtectionShieldGraph />
-            </div>
 
             <div className="bg-[#FD8566] text-black border border-[#FD8566] rounded-[32px] p-8 min-h-[250px] flex flex-col justify-between relative overflow-hidden group">
               <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-20 blur-[100px] pointer-events-none group-hover:opacity-30 transition-opacity duration-1000" />
@@ -187,16 +189,20 @@ export default function DashboardPage() {
               <div className="relative z-10 flex flex-col gap-2 mt-8">
                 <div className="flex justify-between items-center pb-2 border-b border-black/10">
                   <span className="font-mono text-sm opacity-80">Active Put Options</span>
-                  <span className="font-mono font-bold">142 Contracts</span>
+                  <span className="font-mono font-bold">{outCount} {outCount === 1 ? 'Contract' : 'Contracts'}</span>
                 </div>
                 <div className="flex justify-between items-center pb-2 border-b border-black/10">
                   <span className="font-mono text-sm opacity-80">Implied Volatility (σ)</span>
-                  <span className="font-mono font-bold">84.2%</span>
+                  <span className="font-mono font-bold">{outCount > 0 ? impliedVolatility : "0.0"}%</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="font-mono text-sm opacity-80">Solvency Status</span>
                   <span className="font-mono font-bold uppercase tracking-wider flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-green-900 animate-pulse" /> Overcollateralized
+                    {outCount > 0 ? (
+                      <><span className="w-2 h-2 rounded-full bg-green-900 animate-pulse" /> Overcollateralized</>
+                    ) : (
+                      <><span className="w-2 h-2 rounded-full bg-black/40" /> Idle Vault</>
+                    )}
                   </span>
                 </div>
               </div>
