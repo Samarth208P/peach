@@ -17,7 +17,7 @@
 - [x] Develop [ProtectionShieldGraph.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/components/ProtectionShieldGraph.tsx) to visually plot Spot Price vs Floor Price
 - [x] Develop [MicroPremiumLedger.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/components/MicroPremiumLedger.tsx) for tracking atomic premium routing events
 - [x] Build [/dashboard/create](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/app/dashboard/create/page.tsx) wizard form with Price Safety Switch toggle
-- [x] Build [/dashboard/history](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/app/dashboard/history/page.tsx) table matching on-chain event cancellation logs
+- [x] Build [/dashboard/history](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/app/dashboard/history/page.tsx) table matching on-chain event cancellation logs (resolved merge conflicts from main branch)
 
 ## Phase 3: Client & Sui SDK Integrations
 - [x] Setup [SuiProvider.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/components/SuiProvider.tsx) with `@mysten/dapp-kit` configured for Testnet

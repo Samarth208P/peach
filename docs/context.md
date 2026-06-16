@@ -132,3 +132,6 @@ $$\text{Expected Value } E[V_{net}] = \sum (V_{scenario} \times \text{Probabilit
 ### Compilation Status
 * **Move Contracts:** Verified and compiled successfully with `sui move build` on June 16, 2026.
 * **Frontend Next.js App:** Built successfully under production target (`npm run build`) on June 16, 2026.
+
+### Version Control & Branch Merges
+* **Origin/Main Merge:** Merged `origin/main` into local `master` branch on June 16, 2026. Resolved conflicting changes in [history/page.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/app/dashboard/history/page.tsx) by retaining the premium full-page dashboard History layout.
