@@ -15,9 +15,9 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Peach - Ticketing Infrastructure, Reimagined",
+  title: "Peach",
   description:
-    "Headless API-first ticketing infrastructure with NFT-backed ownership, anti-scalping enforcement, and automated resale royalties for platforms like BookMyShow.",
+    "Volatility-Insured Payment Streaming Layer. Automated risk management powered by DeepBook V3 Predict.",
 };
 
 export default function RootLayout({
