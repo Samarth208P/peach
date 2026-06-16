@@ -41,39 +41,17 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#060608] flex flex-col font-sans">
-      {/* Top Nav */}
-      <header className="w-full border-b border-white/[0.05] bg-[#0a0a0c]/80 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-[1600px] w-full mx-auto px-8 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-12">
-            <Link href="/" className="group">
-              <PeachTextLogo className="h-8 w-auto group-hover:scale-105 transition-transform duration-500 origin-left drop-shadow-[0_0_10px_rgba(253,133,102,0.1)]" />
-            </Link>
-            <nav className="hidden md:flex items-center gap-6">
-              <span className="flex items-center gap-2 text-white font-medium text-sm">
-                <LayoutDashboard size={16} className="text-[#FD8566]" /> Overview
-              </span>
-              <span className="flex items-center gap-2 text-[#8a8690] hover:text-white transition-colors cursor-pointer text-sm">
-                <Activity size={16} /> Analytics
-              </span>
-              <span className="flex items-center gap-2 text-[#8a8690] hover:text-white transition-colors cursor-pointer text-sm">
-                <Wallet size={16} /> Vault
-              </span>
-            </nav>
+    <div className="flex flex-col font-sans w-full relative z-10">
+      <main className="w-full max-w-[1600px] mx-auto px-8 py-10 flex flex-col gap-8">
+        {/* Top Actions */}
+        <div className="w-full flex justify-end items-center mb-2 gap-4">
+          <div className="px-4 py-2 bg-white/[0.03] border border-white/[0.08] rounded-full text-sm font-mono text-white/80 backdrop-blur-md">
+            0x89ab...56gh
           </div>
-          
-          <div className="flex items-center gap-4">
-            <div className="px-4 py-2 bg-white/[0.03] border border-white/[0.08] rounded-full text-sm font-mono text-white/80">
-              0x89ab...56gh
-            </div>
-            <Link href="/dashboard/create" className="flex items-center gap-2 bg-[#FD8566] text-black px-5 py-2 rounded-full text-sm font-medium hover:scale-105 transition-transform duration-300">
-              <Plus size={16} /> New Stream
-            </Link>
-          </div>
+          <Link href="/dashboard/create" className="flex items-center gap-2 bg-[#FD8566] text-black px-5 py-2 rounded-full text-sm font-medium hover:scale-105 transition-transform duration-300">
+            <Plus size={16} /> New Stream
+          </Link>
         </div>
-      </header>
-
-      <main className="flex-1 w-full max-w-[1600px] mx-auto px-8 py-10 flex flex-col gap-8">
         
         {/* Top Layer: Global Capital Strip */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -98,7 +76,7 @@ export default function DashboardPage() {
           {/* Left Column: 60% Width */}
           <div className="flex flex-col w-full lg:w-3/5 gap-6">
             
-            <div className="bg-[#0a0a0c] border border-white/[0.05] rounded-[32px] p-8 flex flex-col flex-1 min-h-[400px]">
+            <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/[0.05] rounded-[32px] p-8 flex flex-col flex-1 min-h-[400px]">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl text-white font-display font-medium tracking-tight">Active Streams Queue</h2>
                 <div className="flex bg-white/[0.03] p-1 rounded-lg">
@@ -115,7 +93,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="bg-[#0a0a0c] border border-white/[0.05] rounded-[32px] p-8 min-h-[300px]">
+            <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/[0.05] rounded-[32px] p-8 min-h-[300px]">
               <MicroPremiumLedger />
             </div>
             
@@ -124,7 +102,7 @@ export default function DashboardPage() {
           {/* Right Column: 40% Width */}
           <div className="flex flex-col w-full lg:w-2/5 gap-6">
             
-            <div className="bg-[#0a0a0c] border border-white/[0.05] rounded-[32px] p-8 min-h-[350px] flex flex-col">
+            <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/[0.05] rounded-[32px] p-8 min-h-[350px] flex flex-col">
               <ProtectionShieldGraph />
             </div>
 

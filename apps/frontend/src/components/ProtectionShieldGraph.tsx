@@ -14,7 +14,7 @@ export default function ProtectionShieldGraph() {
   const [data, setData] = React.useState<DataPoint[]>([]);
 
   React.useEffect(() => {
-    const pts = [];
+    const pts: DataPoint[] = [];
     let currentPrice = 1.0;
     const floorPrice = 0.85;
 
@@ -36,19 +36,19 @@ export default function ProtectionShieldGraph() {
 
   return (
     <div className="w-full h-full min-h-[300px] flex flex-col relative group">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6">
         <div>
           <h3 className="text-white font-medium font-display">Protection Shield</h3>
           <p className="text-[#8a8690] text-sm">DeepBook V3 Put Option Coverage</p>
         </div>
-        <div className="flex items-center gap-4 text-xs font-mono">
+        <div className="flex items-center gap-4 text-xs font-mono shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-0.5 bg-white/50"></div>
-            <span className="text-white/60">SUI Spot</span>
+            <div className="w-3 h-0.5 bg-white/50 shrink-0"></div>
+            <span className="text-white/60 whitespace-nowrap">SUI Spot</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-0.5 bg-[#FD8566]"></div>
-            <span className="text-[#FD8566]">Floor</span>
+            <div className="w-3 h-0.5 bg-[#FD8566] shrink-0"></div>
+            <span className="text-[#FD8566] whitespace-nowrap">Floor</span>
           </div>
         </div>
       </div>
@@ -65,10 +65,13 @@ export default function ProtectionShieldGraph() {
               contentStyle={{ backgroundColor: '#0a0a0c', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px' }}
               itemStyle={{ color: '#fff', fontSize: '12px' }}
               labelStyle={{ display: 'none' }}
-              formatter={(value: number, name: string) => [
-                `$${value.toFixed(2)}`, 
-                name === 'spot' ? 'SUI Spot Price' : 'Guaranteed Floor'
-              ]}
+              formatter={(value: any, name: any) => {
+                const val = typeof value === 'number' ? value : Number(value) || 0;
+                return [
+                  `$${val.toFixed(2)}`, 
+                  name === 'spot' ? 'SUI Spot Price' : 'Guaranteed Floor'
+                ];
+              }}
             />
             {/* The guaranteed floor line */}
             <Line 

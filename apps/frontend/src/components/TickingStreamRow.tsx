@@ -19,6 +19,9 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
   const initialValueRef = useRef<number>(0);
   
   useEffect(() => {
+    // Reset start time on effect run
+    startTimeRef.current = null;
+    
     // Initial value based on elapsed seconds
     const velocity = config.targetValue / config.durationSeconds;
     initialValueRef.current = config.elapsedSeconds * velocity;
@@ -42,7 +45,7 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
 
     animationFrameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [config]);
+  }, [config.targetValue, config.durationSeconds, config.elapsedSeconds]);
 
   const percentage = Math.min((balance / config.targetValue) * 100, 100);
 

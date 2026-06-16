@@ -48,7 +48,7 @@ export default function MicroPremiumLedger() {
         <h3 className="text-white font-medium text-sm font-mono tracking-tight uppercase opacity-80">PTB Execution Ledger</h3>
       </div>
       
-      <div className="flex-1 overflow-hidden bg-[#0a0a0c] border border-white/[0.03] rounded-[20px] p-4">
+      <div className="flex-1 overflow-hidden bg-white/[0.02] backdrop-blur-md border border-white/[0.03] rounded-[20px] p-4">
         <div className="flex flex-col gap-2">
           {logs.map((log, index) => (
             <div 
