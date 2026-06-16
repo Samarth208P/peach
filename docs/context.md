@@ -59,29 +59,49 @@ $$\text{Expected Value } E[V_{net}] = \sum (V_{scenario} \times \text{Probabilit
 ### Target Module: `peach_contracts::peach_stream`
 * **Source File:** [peach_stream.move](file:///c:/Users/krish/OneDrive/Desktop/peach/packages/peach_contracts/sources/peach_stream.move)
 * **Active Structs:**
-  * `Stream` (has `key, store`):
+  * `PeachStream` (has `key`):
     ```rust
-    public struct Stream has key, store {
+    public struct PeachStream has key {
         id: UID,
+        sender: address,
+        receiver: address,
+        total_amount: u64,
+        withdrawn: u64,
         balance: Balance<SUI>,
-        recipient: address,
-        start_time_ms: u64,
-        end_time_ms: u64,
+        start_time: u64,
+        end_time: u64,
     }
     ```
-  * `StreamCreatedEvent` (has `copy, drop`):
+  * `StreamCreated` (has `copy, drop`):
     ```rust
-    public struct StreamCreatedEvent has copy, drop {
+    public struct StreamCreated has copy, drop {
         stream_id: ID,
-        recipient: address,
-        deposit_amount: u64,
-        premium_amount: u64,
-        start_time_ms: u64,
-        end_time_ms: u64,
+        sender: address,
+        receiver: address,
+    }
+    ```
+  * `StreamClaimed` (has `copy, drop`):
+    ```rust
+    public struct StreamClaimed has copy, drop {
+        stream_id: ID,
+        claimer: address,
+        amount_claimed: u64,
+    }
+    ```
+  * `StreamCanceled` (has `copy, drop`):
+    ```rust
+    public struct StreamCanceled has copy, drop {
+        stream_id: ID,
+        sender: address,
+        receiver: address,
+        receiver_settled_amount: u64,
+        sender_refunded_amount: u64,
     }
     ```
 * **Core Functions:**
-  * `create_stream(deposit, recipient, start_time_ms, end_time_ms, ctx)`: Splits 1% premium and returns `(Stream, Coin<SUI>)`.
+  * `create_stream(receiver, start_time, end_time, fee_coin, ctx)`: Initializes a shared `PeachStream` object and emits a `StreamCreated` footprint event.
+  * `claim_stream(stream, clock, ctx)`: Allows recipient to pull unlocked funds based on elapsed time, emitting `StreamClaimed`.
+  * `cancel_stream(stream, clock, ctx)`: Destructs the shared `PeachStream` object by value, settles remaining unlocked balance to recipient, refunds the rest to the sender, and emits `StreamCanceled`.
 
 ---
 
@@ -96,6 +116,7 @@ $$\text{Expected Value } E[V_{net}] = \sum (V_{scenario} \times \text{Probabilit
 
 ### Page Architecture
 1. **Auth Portal (`/`):** Simple zkLogin ("Continue with Google") + Wallet Connect hybrid.
+   * *Hydration Status:* Fixed SSR/client hydration mismatch by wrapping wallet loading maps in client-side state mount hooks.
 2. **Main Dashboard (`/dashboard`):** 
    * **Global Capital Strip:** Total Volume, Active Vectors, Net Insured Capital, Ecosystem Savings.
    * **Left (60%):** Ticking Stream Queue (RAF loops) + Micro-Premium Ledger.

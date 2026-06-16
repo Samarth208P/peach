@@ -15,6 +15,11 @@ export default function LoginPage() {
   const wallets = useWallets();
   const { mutate: connect } = useConnectWallet();
   const currentAccount = useCurrentAccount();
+  const [mounted, setMounted] = React.useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (currentAccount) {
@@ -58,7 +63,11 @@ export default function LoginPage() {
           </div>
 
           <div className="flex flex-col gap-3 auth-item w-full">
-            {wallets.length === 0 ? (
+            {!mounted ? (
+              <div className="text-center text-[#8a8690] p-4 border border-white/5 rounded-2xl bg-white/[0.02]">
+                Loading wallets...
+              </div>
+            ) : wallets.length === 0 ? (
               <div className="text-center text-[#8a8690] p-4 border border-white/5 rounded-2xl bg-white/[0.02]">
                 No Sui wallets installed. Please install a wallet (like Sui Wallet or Suiet) to continue.
               </div>

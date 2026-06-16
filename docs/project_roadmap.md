@@ -11,7 +11,7 @@
 ## Phase 2: Frontend & UI Components (`apps/frontend`)
 - [x] Configure Tailwind CSS v4 and monorepo structure
 - [x] Design premium dark mode interface with neon peach `#FF7A59` accenting
-- [x] Build [/login](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/app/login/page.tsx) page with Google zkLogin hooks and wallet connect option
+- [x] Build [/login](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/app/login/page.tsx) page with Google zkLogin hooks and wallet connect option (fixed SSR hydration mismatch)
 - [x] Build [/dashboard](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/app/dashboard/page.tsx) page with Capital metrics layout
 - [x] Develop [TickingStreamRow.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/components/TickingStreamRow.tsx) component for real-time per-second visual decay
 - [x] Develop [ProtectionShieldGraph.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/components/ProtectionShieldGraph.tsx) to visually plot Spot Price vs Floor Price
