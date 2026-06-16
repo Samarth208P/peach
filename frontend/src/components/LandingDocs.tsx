@@ -9,6 +9,7 @@ import mermaid from "mermaid";
 
 export default function LandingDocs() {
   const container = useRef<HTMLDivElement>(null);
+  const [mermaidSvg, setMermaidSvg] = React.useState<string>("");
 
   useGSAP(() => {
     gsap.fromTo(".doc-block", 
@@ -25,11 +26,20 @@ export default function LandingDocs() {
         }
       }
     );
-
-    mermaid.initialize({ startOnLoad: false, theme: 'dark', background: 'transparent' });
-    mermaid.run({ querySelector: '.mermaid' }).catch(console.error);
-
   }, { scope: container });
+
+  React.useEffect(() => {
+    mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+    const graphDef = `flowchart TD
+    A[Market Volatility Spikes] --> B[OracleSVI Increases Option Premium]
+    B --> C[Peach Adjusts Insurance Coverage Dynamically]
+    C --> D[Standard: 1% premium = 100% Downside Protected]
+    C --> E[Extreme: 1% premium = 85% Bounded Downside Floor]`;
+    
+    mermaid.render('mermaid-chart-svg', graphDef).then(({ svg }) => {
+      setMermaidSvg(svg);
+    }).catch(console.error);
+  }, []);
 
   return (
     <section id="docs" ref={container} className="max-w-7xl w-full mx-auto px-6 py-32 relative z-10 border-t border-white/[0.05]">
@@ -147,15 +157,12 @@ export default function LandingDocs() {
               A major concern is a high-velocity market crash (where implied volatility <MathFormula math="\sigma" /> doubles instantly). Peach maintains a static risk tolerance profile: it never increases the 1% micro-allocation fee. Instead, if premium costs double, Peach&apos;s internal algorithm scales back the downside range position proportionally.
             </p>
             
-            <div className="bg-[#0a0a0c] p-8 rounded-[24px] border border-white/[0.05] flex justify-center overflow-x-auto">
-              <div className="mermaid">
-{`flowchart TD
-    A[Market Volatility Spikes] --> B[OracleSVI Increases Option Premium]
-    B --> C[Peach Adjusts Insurance Coverage Dynamically]
-    C --> D[Standard: 1% premium = 100% Downside Protected]
-    C --> E[Extreme: 1% premium = 85% Bounded Downside Floor]
-`}
-              </div>
+            <div className="bg-[#0a0a0c] p-8 rounded-[24px] border border-white/[0.05] flex justify-center overflow-x-auto min-h-[300px] items-center">
+              {mermaidSvg ? (
+                <div dangerouslySetInnerHTML={{ __html: mermaidSvg }} />
+              ) : (
+                <span className="text-[#8a8690] animate-pulse">Loading Chart...</span>
+              )}
             </div>
           </div>
 
