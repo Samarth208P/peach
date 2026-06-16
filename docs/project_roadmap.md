@@ -17,6 +17,7 @@
 - [x] Develop [ProtectionShieldGraph.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/components/ProtectionShieldGraph.tsx) to visually plot Spot Price vs Floor Price
 - [x] Develop [MicroPremiumLedger.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/components/MicroPremiumLedger.tsx) for tracking atomic premium routing events
 - [x] Build [/dashboard/create](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/app/dashboard/create/page.tsx) wizard form with Price Safety Switch toggle
+- [x] Build [/dashboard/history](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/app/dashboard/history/page.tsx) table matching on-chain event cancellation logs
 
 ## Phase 3: Client & Sui SDK Integrations
 - [x] Setup [SuiProvider.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/components/SuiProvider.tsx) with `@mysten/dapp-kit` configured for Testnet
@@ -30,7 +31,7 @@
 ## Phase 4: Production Setup & Polish
 - [x] Configure Node.js engines `>=22` in root and frontend package configs
 - [x] Setup `.nvmrc` and `.node-version` configurations
-- [x] Verify multi-workspace build compilation works successfully
+- [x] Verify multi-workspace build compilation works successfully (Move modules and Next.js app build clean)
 - [x] Implement Enoki/Shinami SDKs for zkLogin serverless salt/prover configurations
 - [x] Implement smart money-market lending (Navi/Scallop) float yield routing and yield performance fee split
 - [x] Deploy Move contract package to Sui Testnet/Mainnet

@@ -122,8 +122,13 @@ $$\text{Expected Value } E[V_{net}] = \sum (V_{scenario} \times \text{Probabilit
    * **Left (60%):** Ticking Stream Queue (RAF loops) + Micro-Premium Ledger.
    * **Right (40%):** Protection Shield Graph (Plotting Spot Price vs Floor Price) + DeepBook Predict Vault info.
 3. **Form Wizard (`/dashboard/create`):** Stream settings with "Price Safety Switch" toggle.
+4. **History Ledger (`/dashboard/history`):** Complete, immutable, on-chain record of settled, canceled, and terminated stream receipts reconstructed directly from indexed Move event logs.
 
 ### Project References
 * **Active Move Package ID:** `0x49c002ce2aadfa23c699394e44be190188a9ec6ea0d2b8b3c23dce7779904d22`
 * **Testnet Alternate ID (README):** `0x25219b630a85a209ead80522fde59636ee514259208586e8475a176c8510672c`
 * **Sui Provider Hookups:** [SuiProvider.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/components/SuiProvider.tsx) (configured for Testnet by default).
+
+### Compilation Status
+* **Move Contracts:** Verified and compiled successfully with `sui move build` on June 16, 2026.
+* **Frontend Next.js App:** Built successfully under production target (`npm run build`) on June 16, 2026.

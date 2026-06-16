@@ -9,6 +9,7 @@ const navigation = [
   { name: "Streams", href: "/dashboard/streams" },
   { name: "Insurance", href: "/dashboard/insurance" },
   { name: "Treasury", href: "/dashboard/treasury" },
+  { name: "History", href: "/dashboard/history" },
 ];
 
 export default function DashboardLayout({
