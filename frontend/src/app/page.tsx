@@ -66,7 +66,7 @@ export default function LandingPage() {
       }
 
       // Split Pin Scroll
-      let mm = gsap.matchMedia();
+      const mm = gsap.matchMedia();
       mm.add("(min-width: 1024px)", () => {
         if (pinSectionRef.current && pinLeftRef.current) {
           ScrollTrigger.create({
