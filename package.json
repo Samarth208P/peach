@@ -1,6 +1,9 @@
 {
   "name": "peach-monorepo",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "packageManager": "npm@11.4.2",
   "workspaces": [
     "apps/*",
