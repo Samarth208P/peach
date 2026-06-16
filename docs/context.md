@@ -125,7 +125,7 @@ $$\text{Expected Value } E[V_{net}] = \sum (V_{scenario} \times \text{Probabilit
 4. **History Ledger (`/dashboard/history`):** Complete, immutable, on-chain record of settled, canceled, and terminated stream receipts reconstructed directly from indexed Move event logs.
 
 ### Project References
-* **Active Move Package ID:** `0x49c002ce2aadfa23c699394e44be190188a9ec6ea0d2b8b3c23dce7779904d22`
+* **Active Move Package ID:** `0x23b6f040c2c08d3d4b692d48d2c1f9826148a57893098f7d143458f2953763bc`
 * **Testnet Alternate ID (README):** `0x25219b630a85a209ead80522fde59636ee514259208586e8475a176c8510672c`
 * **Sui Provider Hookups:** [SuiProvider.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/components/SuiProvider.tsx) (configured for Testnet by default).
 
@@ -134,4 +134,7 @@ $$\text{Expected Value } E[V_{net}] = \sum (V_{scenario} \times \text{Probabilit
 * **Frontend Next.js App:** Built successfully under production target (`npm run build`) on June 16, 2026.
 
 ### Version Control & Branch Merges
-* **Origin/Main Merge:** Merged `origin/main` into local `master` branch on June 16, 2026. Resolved conflicting changes in [history/page.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/app/dashboard/history/page.tsx) by retaining the premium full-page dashboard History layout.
+* **Origin/Main Merge:** Merged `origin/main` into local `master` branch on June 16, 2026. Resolved conflicting changes in [history/page.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/app/dashboard/history/page.tsx) by retaining the premium full-page dashboard History layout, and resolved a duplicate layout navigation key warning in [layout.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/app/dashboard/layout.tsx).
+* **Wallet Validation Fix:** Resolved a `ValidationError: Expected Object but received Object` during transaction signing by replacing the invalid non-hex placeholder `ORACLE_SVI_TESTNET_OBJECT_ID` in [TickingStreamRow.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/components/TickingStreamRow.tsx) with a hex-valid dummy address, and simplified `splitCoins` parameters in [create/page.tsx](file:///c:/Users/krish/OneDrive/Desktop/peach/apps/frontend/src/app/dashboard/create/page.tsx) to prevent double-wrapping arguments.
+* **Move Redeployment & PTB Swap Fix**: Upgraded Move contracts with helper constructors, published to Testnet (`0x23b6f040c2c08d3d4b692d48d2c1f9826148a57893098f7d143458f2953763bc`), and successfully initialized/shared mock objects on Testnet (`PredictPool`: `0x4c926249761de71fae516c0305481da3aa38f9439b1f27c933b8bbc613352243`, `OracleSVI`: `0xb79189c195876000b9de26caf42279766f3ab9c7b1b5c4764887e04b406b5b06`). Simplified PTB spot swap by splitting SUI from gas directly to use SUI as option fee/premium type argument, resolving the `clob_v3` module dry-run failure.
+

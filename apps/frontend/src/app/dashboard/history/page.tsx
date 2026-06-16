@@ -4,7 +4,7 @@ import React from "react";
 import { useSuiClientQuery, useCurrentAccount } from '@mysten/dapp-kit';
 import { ShieldCheck, History, ArrowDownLeft, ArrowUpRight, Clock } from "lucide-react";
 
-const PACKAGE_ID = "0x49c002ce2aadfa23c699394e44be190188a9ec6ea0d2b8b3c23dce7779904d22";
+const PACKAGE_ID = "0x23b6f040c2c08d3d4b692d48d2c1f9826148a57893098f7d143458f2953763bc";
 
 export default function HistoryPage() {
   const currentAccount = useCurrentAccount();

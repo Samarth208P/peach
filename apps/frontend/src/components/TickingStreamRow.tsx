@@ -5,10 +5,10 @@ import { ArrowUpRight, ArrowDownLeft, ShieldCheck, RefreshCw } from "lucide-reac
 import { Transaction } from "@mysten/sui/transactions";
 import { useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 
-const PACKAGE_ID = "0xfeded63bda28be37a34d937fe8dfe8c294596a26f4c9805128812edfd085c025";
-const DEEPBOOK_PREDICT_POOL_ID = "0x3b1cfc560205d12a23bb800bc19e342718a3d58de41bb33cf517d925e01ba062";
-const OPTION_USDC_TYPE = "0x0111111111111111111111111111111111111111111111111111111111111111::db_usdc::DB_USDC";
-const ORACLE_SVI_TESTNET_OBJECT_ID = "0xORACLE_SVI_TESTNET_OBJECT_ID";
+const PACKAGE_ID = "0x23b6f040c2c08d3d4b692d48d2c1f9826148a57893098f7d143458f2953763bc";
+const DEEPBOOK_PREDICT_POOL_ID = "0x4c926249761de71fae516c0305481da3aa38f9439b1f27c933b8bbc613352243";
+const OPTION_USDC_TYPE = "0x2::sui::SUI";
+const ORACLE_SVI_TESTNET_OBJECT_ID = "0xb79189c195876000b9de26caf42279766f3ab9c7b1b5c4764887e04b406b5b06";
 
 interface StreamConfig {
   id: string;

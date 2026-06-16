@@ -6,10 +6,10 @@ import { Transaction } from "@mysten/sui/transactions";
 import { useRouter } from "next/navigation";
 import { Shield, ArrowRight, Zap, CheckCircle2 } from "lucide-react";
 
-const PACKAGE_ID = "0xfeded63bda28be37a34d937fe8dfe8c294596a26f4c9805128812edfd085c025";
+const PACKAGE_ID = "0x23b6f040c2c08d3d4b692d48d2c1f9826148a57893098f7d143458f2953763bc";
 const DEEPBOOK_SPOT_POOL_ID = "0x7f23e4215286561ba08d4b29bb887565a44848d73b06103faee202df3b9df728";
-const DEEPBOOK_PREDICT_POOL_ID = "0x3b1cfc560205d12a23bb800bc19e342718a3d58de41bb33cf517d925e01ba062";
-const OPTION_USDC_TYPE = "0x0111111111111111111111111111111111111111111111111111111111111111::db_usdc::DB_USDC";
+const DEEPBOOK_PREDICT_POOL_ID = "0x4c926249761de71fae516c0305481da3aa38f9439b1f27c933b8bbc613352243";
+const OPTION_USDC_TYPE = "0x2::sui::SUI";
 
 export default function CreateStreamPage() {
   const [amount, setAmount] = useState("10");
@@ -47,23 +47,10 @@ export default function CreateStreamPage() {
         const premiumAmount = Math.floor(amountInMist * 0.01);
         const netStreamAmount = amountInMist - premiumAmount;
         
-        const [baseCoin] = txb.splitCoins(txb.gas, [txb.pure.u64(amountInMist)]);
-        const [premiumSuiCoin, streamSui] = txb.splitCoins(baseCoin, [
-          txb.pure.u64(premiumAmount),
-          txb.pure.u64(netStreamAmount),
+        const [premiumSuiCoin, streamSui] = txb.splitCoins(txb.gas, [
+          premiumAmount,
+          netStreamAmount,
         ]);
-        
-        // DeepBook V3 Spot Swap (Convert SUI to USDC)
-        const [swappedUsdcCoin] = txb.moveCall({
-          target: `deepbook::clob_v3::swap_exact_base_for_quote`,
-          arguments: [
-            txb.object(DEEPBOOK_SPOT_POOL_ID),
-            premiumSuiCoin,
-            txb.pure.u64(0),
-            txb.object("0x6"),
-          ],
-          typeArguments: [OPTION_USDC_TYPE],
-        });
 
         // Initialize self-hedged Peach Stream Object state
         txb.moveCall({
@@ -74,7 +61,7 @@ export default function CreateStreamPage() {
             txb.pure.u64(endTimeMs),
             txb.pure.u64(currentStrikePrice),
             streamSui,       
-            swappedUsdcCoin,     
+            premiumSuiCoin,     
             txb.object(DEEPBOOK_PREDICT_POOL_ID),
           ],
           typeArguments: [OPTION_USDC_TYPE],

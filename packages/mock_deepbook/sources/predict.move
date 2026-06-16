@@ -32,4 +32,11 @@ module deepbook::predict {
         // Return a dummy balance to satisfy the type constraints of the parent function
         balance::zero<USDC>()
     }
+
+    public fun create_pool(min_lot_size: u64, ctx: &mut TxContext): PredictPool {
+        PredictPool {
+            id: sui::object::new(ctx),
+            min_lot_size,
+        }
+    }
 }

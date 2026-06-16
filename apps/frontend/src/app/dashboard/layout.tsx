@@ -7,7 +7,6 @@ import AnimatedLogo from "@/components/AnimatedLogo";
 const navigation = [
   { name: "Overview", href: "/dashboard" },
   { name: "Streams", href: "/dashboard/streams" },
-  { name: "History", href: "/dashboard/history" },
   { name: "Insurance", href: "/dashboard/insurance" },
   { name: "Treasury", href: "/dashboard/treasury" },
   { name: "History", href: "/dashboard/history" },
