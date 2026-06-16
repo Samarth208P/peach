@@ -1,11 +1,10 @@
 [package]
-name = "peach_contracts"
+name = "DeepBook"
+version = "3.0.0"
 edition = "2024"
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet" }
-DeepBook = { local = "../mock_deepbook" }
 
 [addresses]
-peach_contracts = "0x0"
-sui = "0x2"
+deepbook = "0x0"
