@@ -1,45 +1,21 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Terminal, ExternalLink } from "lucide-react";
+import { useSuiClientQuery } from '@mysten/dapp-kit';
 
-interface LogEntry {
-  id: string;
-  timestamp: string;
-  streamId: string;
-  premium: string;
-  txHash: string;
-}
+const PACKAGE_ID = "0x25219b630a85a209ead80522fde59636ee514259208586e8475a176c8510672c";
 
 export default function MicroPremiumLedger() {
-  const [logs, setLogs] = useState<LogEntry[]>(() => {
-    return Array.from({ length: 5 }).map((_, i) => ({
-      id: Math.random().toString(36).substring(7),
-      timestamp: new Date(Date.now() - i * 60000).toLocaleTimeString([], { hour12: false }),
-      streamId: `st_${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-      premium: (Math.random() * 0.5 + 0.1).toFixed(3),
-      txHash: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`
-    }));
-  });
-
-  useEffect(() => {
-
-    // Simulate incoming ledger events
-    const interval = setInterval(() => {
-      setLogs(prev => {
-        const newLog = {
-          id: Math.random().toString(36).substring(7),
-          timestamp: new Date().toLocaleTimeString([], { hour12: false }),
-          streamId: `st_${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-          premium: (Math.random() * 0.5 + 0.1).toFixed(3),
-          txHash: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`
-        };
-        return [newLog, ...prev].slice(0, 8); // Keep only 8 logs
-      });
-    }, 4000);
-
-    return () => clearInterval(interval);
-  }, []);
+  const { data, isPending } = useSuiClientQuery(
+    'queryEvents',
+    {
+      query: { MoveEventType: `${PACKAGE_ID}::peach_stream::StreamCreatedEvent` },
+      order: 'descending',
+      limit: 8
+    },
+    { refetchInterval: 3000 }
+  );
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -49,26 +25,45 @@ export default function MicroPremiumLedger() {
       </div>
       
       <div className="flex-1 overflow-hidden bg-white/[0.02] backdrop-blur-md border border-white/[0.03] rounded-[20px] p-4">
-        <div className="flex flex-col gap-2">
-          {logs.map((log, index) => (
-            <div 
-              key={log.id} 
-              className="flex items-center justify-between text-xs font-mono p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] transition-colors group animate-in fade-in slide-in-from-top-2 duration-500"
-              style={{ opacity: 1 - (index * 0.15) }}
-            >
-              <div className="flex items-center gap-4">
-                <span className="text-[#8a8690]">{log.timestamp}</span>
-                <span className="text-white">{log.streamId}</span>
-              </div>
-              <div className="flex items-center gap-6">
-                <span className="text-[#FD8566]">- {log.premium} SUI</span>
-                <a href="#" className="flex items-center gap-1 text-blue-400/80 hover:text-blue-300 transition-colors">
-                  {log.txHash} <ExternalLink size={10} />
-                </a>
-              </div>
-            </div>
-          ))}
-        </div>
+        {isPending ? (
+          <div className="flex items-center justify-center h-full text-[#8a8690] text-sm">
+            Listening for on-chain events...
+          </div>
+        ) : !data || data.data.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-[#8a8690] text-sm">
+            No PTB executions found for this contract yet.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {data.data.map((event, index) => {
+              const parsedJson = event.parsedJson as any;
+              const timestamp = new Date(Number(event.timestampMs)).toLocaleTimeString([], { hour12: false });
+              const streamId = `st_${parsedJson.stream_id.substring(0, 6).toUpperCase()}`;
+              // Convert mist to SUI
+              const premiumSUI = (Number(parsedJson.premium_amount) / 1_000_000_000).toFixed(3);
+              const txHash = `${event.id.txDigest.substring(0, 6)}...${event.id.txDigest.substring(event.id.txDigest.length - 4)}`;
+              const explorerLink = `https://suivision.xyz/txblock/${event.id.txDigest}?network=testnet`;
+
+              return (
+                <div 
+                  key={event.id.txDigest + event.id.eventSeq} 
+                  className="flex items-center justify-between text-xs font-mono p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] transition-colors group"
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="text-[#8a8690]">{timestamp}</span>
+                    <span className="text-white">{streamId}</span>
+                  </div>
+                  <div className="flex items-center gap-6">
+                    <span className="text-[#FD8566]">- {premiumSUI} SUI</span>
+                    <a href={explorerLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-blue-400/80 hover:text-blue-300 transition-colors">
+                      {txHash} <ExternalLink size={10} />
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

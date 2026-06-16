@@ -8,37 +8,43 @@ import ProtectionShieldGraph from "@/components/ProtectionShieldGraph";
 import MicroPremiumLedger from "@/components/MicroPremiumLedger";
 
 import { Plus, LayoutDashboard, Wallet, Activity } from "lucide-react";
+import { useCurrentAccount, useSuiClientQuery } from "@mysten/dapp-kit";
+
+const PACKAGE_ID = "0x25219b630a85a209ead80522fde59636ee514259208586e8475a176c8510672c";
 
 export default function DashboardPage() {
-  const mockStreams = [
+  const currentAccount = useCurrentAccount();
+  
+  const { data: streamsData, isPending } = useSuiClientQuery(
+    'getOwnedObjects',
     {
-      id: "1",
-      type: "outbound" as const,
-      targetValue: 50000,
-      durationSeconds: 30 * 24 * 60 * 60,
-      elapsedSeconds: 15 * 24 * 60 * 60,
-      sender: "0x89ab12cd34ef56gh",
-      receiver: "0x12cd34ef56gh78ij"
+      owner: currentAccount?.address || '',
+      filter: { StructType: `${PACKAGE_ID}::peach_stream::Stream` },
+      options: { showContent: true }
     },
     {
-      id: "2",
-      type: "inbound" as const,
-      targetValue: 12500,
-      durationSeconds: 14 * 24 * 60 * 60,
-      elapsedSeconds: 3 * 24 * 60 * 60,
-      sender: "0xab12cd34ef56gh89",
-      receiver: "0x89ab12cd34ef56gh"
-    },
-    {
-      id: "3",
-      type: "outbound" as const,
-      targetValue: 8000,
-      durationSeconds: 7 * 24 * 60 * 60,
-      elapsedSeconds: 6 * 24 * 60 * 60,
-      sender: "0x89ab12cd34ef56gh",
-      receiver: "0xef56gh78ij90kl"
+      enabled: !!currentAccount,
+      refetchInterval: 5000
     }
-  ];
+  );
+
+  // Parse real streams
+  const activeStreams = streamsData?.data?.map((obj: any) => {
+    const fields = obj.data?.content?.fields;
+    return {
+      id: obj.data?.objectId,
+      type: "outbound" as const,
+      // SUI has 9 decimals
+      targetValue: fields?.balance ? Number(fields.balance) / 1_000_000_000 : 0,
+      durationSeconds: 30 * 24 * 60 * 60, // 30 days default for demo
+      elapsedSeconds: 0, 
+      sender: currentAccount?.address || "",
+      receiver: fields?.recipient || ""
+    };
+  }) || [];
+
+  const totalVolume = activeStreams.reduce((acc, curr) => acc + curr.targetValue, 0);
+
 
   return (
     <div className="flex flex-col font-sans w-full relative z-10">
@@ -46,7 +52,7 @@ export default function DashboardPage() {
         {/* Top Actions */}
         <div className="w-full flex justify-end items-center mb-2 gap-4">
           <div className="px-4 py-2 bg-white/[0.03] border border-white/[0.08] rounded-full text-sm font-mono text-white/80 backdrop-blur-md">
-            0x89ab...56gh
+            {currentAccount ? `${currentAccount.address.slice(0, 6)}...${currentAccount.address.slice(-4)}` : "Not Connected"}
           </div>
           <Link href="/dashboard/create" className="flex items-center gap-2 bg-[#FD8566] text-black px-5 py-2 rounded-full text-sm font-medium hover:scale-105 transition-transform duration-300">
             <Plus size={16} /> New Stream
@@ -56,10 +62,10 @@ export default function DashboardPage() {
         {/* Top Layer: Global Capital Strip */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {[
-            { label: "Total Streamed Volume", value: "$842,590.00", spark: "+12.5%" },
-            { label: "Active Vectors", value: "3 Out / 1 In", spark: "Stable" },
-            { label: "Net Insured Capital", value: "$62,500.00", spark: "100% Protected" },
-            { label: "Ecosystem Savings", value: "$18,450.22", spark: "Last 30 Days" }
+            { label: "Total Streamed Volume", value: `${totalVolume.toFixed(2)} SUI`, spark: "Active Testnet" },
+            { label: "Active Vectors", value: `${activeStreams.length} Out / 0 In`, spark: "Stable" },
+            { label: "Net Insured Capital", value: `${(totalVolume * 0.99).toFixed(2)} SUI`, spark: "100% Protected" },
+            { label: "Micro-Premiums (1%)", value: `${(totalVolume * 0.01).toFixed(2)} SUI`, spark: "Routed to DeepBook" }
           ].map((metric, i) => (
             <div key={i} className="bg-white/[0.02] border border-white/[0.05] rounded-3xl p-6 flex flex-col gap-3 relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-white/[0.01] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -87,9 +93,15 @@ export default function DashboardPage() {
               </div>
               
               <div className="flex flex-col gap-4">
-                {mockStreams.map(stream => (
-                  <TickingStreamRow key={stream.id} config={stream} />
-                ))}
+                {isPending ? (
+                  <div className="text-center text-[#8a8690] py-10">Fetching live streams...</div>
+                ) : activeStreams.length === 0 ? (
+                  <div className="text-center text-[#8a8690] py-10">No active streams found. Create one!</div>
+                ) : (
+                  activeStreams.map((stream: any) => (
+                    <TickingStreamRow key={stream.id} config={stream} />
+                  ))
+                )}
               </div>
             </div>
 

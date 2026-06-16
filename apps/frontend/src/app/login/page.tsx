@@ -1,15 +1,26 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import PeachTextLogo from "@/components/PeachTextLogo";
+import { useConnectWallet, useWallets, useCurrentAccount } from '@mysten/dapp-kit';
 
 export default function LoginPage() {
   const container = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  
+  const wallets = useWallets();
+  const { mutate: connect } = useConnectWallet();
+  const currentAccount = useCurrentAccount();
+
+  useEffect(() => {
+    if (currentAccount) {
+      router.push("/dashboard");
+    }
+  }, [currentAccount, router]);
 
   useGSAP(() => {
     gsap.fromTo(".auth-box", 
@@ -21,12 +32,6 @@ export default function LoginPage() {
       { y: 0, opacity: 1, duration: 0.5, stagger: 0.1, ease: "power2.out", delay: 0.2 }
     );
   }, { scope: container });
-
-  const handleWalletConnect = () => {
-    // Placeholder for Sui dApp Kit Wallet Connection
-    console.log("Opening standard Web3 wallet modal...");
-    router.push("/dashboard");
-  };
 
   return (
     <div ref={container} className="min-h-screen bg-[#060608] flex flex-col relative overflow-hidden font-sans">
@@ -52,16 +57,23 @@ export default function LoginPage() {
             <p className="text-[#8a8690] font-light">Sign in to manage your protected streams.</p>
           </div>
 
-          <div className="auth-item w-full">
-            <button 
-              onClick={handleWalletConnect}
-              className="group relative flex items-center justify-center w-full bg-[#FD8566] text-black rounded-2xl p-4 font-medium transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(253,133,102,0.3)]"
-            >
-              <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-              </svg>
-              <span>Connect Web3 Wallet</span>
-            </button>
+          <div className="flex flex-col gap-3 auth-item w-full">
+            {wallets.length === 0 ? (
+              <div className="text-center text-[#8a8690] p-4 border border-white/5 rounded-2xl bg-white/[0.02]">
+                No Sui wallets installed. Please install a wallet (like Sui Wallet or Suiet) to continue.
+              </div>
+            ) : (
+              wallets.map((wallet) => (
+                <button 
+                  key={wallet.name}
+                  onClick={() => connect({ wallet })}
+                  className="group relative flex items-center justify-center w-full bg-white/[0.04] border border-white/[0.08] text-white rounded-2xl p-4 font-medium transition-all duration-300 hover:bg-[#FD8566]/10 hover:border-[#FD8566]/30 hover:text-[#FD8566]"
+                >
+                  <img src={wallet.icon} alt={wallet.name} className="w-5 h-5 mr-3 opacity-80 group-hover:opacity-100 transition-opacity" />
+                  <span>{wallet.name}</span>
+                </button>
+              ))
+            )}
           </div>
 
         </div>

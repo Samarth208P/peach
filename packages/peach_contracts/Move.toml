@@ -1,0 +1,9 @@
+[package]
+name = "peach_contracts"
+edition = "2024"
+
+[dependencies]
+
+[addresses]
+peach_contracts = "0x0"
+sui = "0x2"
