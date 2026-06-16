@@ -8,6 +8,7 @@ import { useGSAP } from "@gsap/react";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import AnimatedHeroBackground from "@/components/AnimatedHeroBackground";
 import PeachTextLogo from "@/components/PeachTextLogo";
+import LandingDocs from "@/components/LandingDocs";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(useGSAP, ScrollTrigger);
@@ -310,6 +311,8 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      <LandingDocs />
 
       {/* Premium Minimal Footer */}
       <footer className="w-full border-t border-white/[0.05] relative z-10 overflow-hidden">
