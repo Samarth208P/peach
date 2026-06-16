@@ -9,13 +9,17 @@ import ProtectionShieldGraph from "@/components/ProtectionShieldGraph";
 import MicroPremiumLedger from "@/components/MicroPremiumLedger";
 
 import { Plus, LayoutDashboard, Wallet, Activity } from "lucide-react";
-import { useCurrentAccount, useSuiClientQuery } from "@mysten/dapp-kit";
+import { useCurrentAccount, useSuiClientQuery, useSuiClient } from "@mysten/dapp-kit";
 
 const PACKAGE_ID = "0x49c002ce2aadfa23c699394e44be190188a9ec6ea0d2b8b3c23dce7779904d22";
 
 export default function DashboardPage() {
   const currentAccount = useCurrentAccount();
   const router = useRouter();
+  const client = useSuiClient();
+
+  const [activeStreams, setActiveStreams] = React.useState<any[]>([]);
+  const [isPending, setIsPending] = React.useState(true);
 
   React.useEffect(() => {
     if (!currentAccount) {
@@ -23,12 +27,13 @@ export default function DashboardPage() {
     }
   }, [currentAccount, router]);
   
-  const { data: streamsData, isPending } = useSuiClientQuery(
-    'getOwnedObjects',
+  const { data: eventsData } = useSuiClientQuery(
+    'queryEvents',
     {
-      owner: currentAccount?.address || '',
-      filter: { StructType: `${PACKAGE_ID}::peach_stream::Stream` },
-      options: { showContent: true }
+      query: {
+        MoveEventType: `${PACKAGE_ID}::peach_stream::StreamCreated`,
+      },
+      order: 'descending',
     },
     {
       enabled: !!currentAccount,
@@ -36,29 +41,68 @@ export default function DashboardPage() {
     }
   );
 
-  // Parse real streams
-  const activeStreams = streamsData?.data?.map((obj: any) => {
-    const fields = obj.data?.content?.fields;
-    
-    const start = Number(fields?.start_time_ms) || 0;
-    const end = Number(fields?.end_time_ms) || 0;
-    const durationSeconds = end > start ? (end - start) / 1000 : 30 * 24 * 60 * 60;
-    const elapsedSeconds = start > 0 ? Math.max(0, (Date.now() - start) / 1000) : 0;
+  React.useEffect(() => {
+    async function hydrateSharedObjects() {
+      if (!eventsData?.data || !currentAccount?.address) {
+        setIsPending(false);
+        return;
+      }
 
-    return {
-      id: obj.data?.objectId,
-      type: fields?.recipient === currentAccount?.address ? "self" : "outbound",
-      // SUI has 9 decimals
-      targetValue: fields?.balance ? Number(fields.balance) / 1_000_000_000 : 0,
-      durationSeconds: durationSeconds,
-      elapsedSeconds: elapsedSeconds, 
-      sender: currentAccount?.address || "",
-      receiver: fields?.recipient || ""
-    };
-  }) || [];
+      try {
+        const userStreamIds = eventsData.data
+          .map((event) => event.parsedJson as { stream_id: string; sender: string; receiver: string })
+          .filter(
+            (payload) =>
+              payload &&
+              (payload.sender === currentAccount.address ||
+              payload.receiver === currentAccount.address)
+          )
+          .map((payload) => payload.stream_id);
+
+        if (userStreamIds.length === 0) {
+          setActiveStreams([]);
+          setIsPending(false);
+          return;
+        }
+
+        const fieldsData = await client.multiGetObjects({
+          ids: userStreamIds,
+          options: { showContent: true },
+        });
+
+        const validObjects = fieldsData
+          .filter((obj) => obj.data && !obj.error)
+          .map((obj: any) => {
+            const fields = obj.data?.content?.fields;
+            const start = Number(fields?.start_time) || 0;
+            const end = Number(fields?.end_time) || 0;
+            const durationSeconds = end > start ? (end - start) / 1000 : 30 * 24 * 60 * 60;
+            const elapsedSeconds = start > 0 ? Math.max(0, (Date.now() - start) / 1000) : 0;
+
+            return {
+              id: obj.data?.objectId,
+              type: fields?.receiver === currentAccount?.address ? "self" : "outbound",
+              targetValue: fields?.total_amount ? Number(fields.total_amount) / 1_000_000_000 : 0,
+              durationSeconds: durationSeconds,
+              elapsedSeconds: elapsedSeconds, 
+              sender: fields?.sender || "",
+              receiver: fields?.receiver || ""
+            };
+          });
+
+        setActiveStreams(validObjects);
+      } catch (err) {
+        console.error("Hydration pipeline failed:", err);
+      } finally {
+        setIsPending(false);
+      }
+    }
+
+    hydrateSharedObjects();
+  }, [eventsData, currentAccount?.address, client]);
 
   const totalVolume = activeStreams.reduce((acc, curr) => acc + curr.targetValue, 0);
-  const outCount = activeStreams.length; // owned streams are outbound
+  const outCount = activeStreams.filter(s => s.sender === currentAccount?.address).length;
   const inCount = activeStreams.filter(s => s.receiver === currentAccount?.address).length;
 
 

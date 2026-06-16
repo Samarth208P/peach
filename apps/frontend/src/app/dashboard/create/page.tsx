@@ -33,33 +33,35 @@ export default function CreateStreamPage() {
     try {
       const txb = new Transaction();
       
-      const amountInMist = BigInt(parseFloat(amount) * 1_000_000_000);
-      const [deposit] = txb.splitCoins(txb.gas, [amountInMist]);
+      const amountInMist = BigInt(Math.floor(parseFloat(amount) * 1_000_000_000));
+      
+      let streamCoin;
+      if (isProtected) {
+        const premiumAmount = amountInMist / BigInt(100); // 1% premium
+        const netStreamAmount = amountInMist - premiumAmount; // 99% net stream
+        
+        const [premium, stream] = txb.splitCoins(txb.gas, [premiumAmount, netStreamAmount]);
+        streamCoin = stream;
+        
+        // Transfer the premium coin to the current account (or route to DeepBook Predict)
+        txb.transferObjects([premium], txb.pure.address(currentAccount.address));
+      } else {
+        const [stream] = txb.splitCoins(txb.gas, [amountInMist]);
+        streamCoin = stream;
+      }
 
       const startTimeMs = new Date(startDate).getTime();
       const endTimeMs = new Date(endDate).getTime();
 
-      const [stream, premium] = txb.moveCall({
+      txb.moveCall({
         target: `${PACKAGE_ID}::peach_stream::create_stream`,
         arguments: [
-          deposit, 
           txb.pure.address(recipient),
           txb.pure.u64(startTimeMs),
-          txb.pure.u64(endTimeMs)
+          txb.pure.u64(endTimeMs),
+          streamCoin
         ]
       });
-
-      if (isProtected) {
-        // DeepBook V3 Atomic Routing would happen here via the DeepBookClient SDK!
-        // We pass the 1% premium coin directly into the DeepBook spot pool swap,
-        // and pipe the resulting USDC into the Predict Vault.
-        
-        // For the scope of the demo frontend PTB construction, we simply transfer the stream 
-        // and premium back to the user to simulate the execution success.
-        txb.transferObjects([stream, premium], txb.pure.address(currentAccount.address));
-      } else {
-        txb.transferObjects([stream, premium], txb.pure.address(currentAccount.address));
-      }
 
       const result = await signAndExecuteTransaction({
         transaction: txb,
