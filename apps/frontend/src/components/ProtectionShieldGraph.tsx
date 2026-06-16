@@ -27,22 +27,11 @@ export default function ProtectionShieldGraph() {
       address: '0x0000000000000000000000000000000000000000000000000000000000000000'
     });
     
-    // Testnet SUI/DBUSDC Pool ID is usually fixed, but we'll try to find it dynamically or fallback
-    // We can use the known SUI/USDC testnet pool if getPoolIdByAssets fails
     const fetchPrice = async () => {
       try {
-        let poolId;
-        try {
-          // Native asset mapping provided by the SDK
-          poolId = await dbClient.getPoolIdByAssets('SUI', 'DBUSDC');
-        } catch (e) {
-          // Fallback to known common testnet pool if dynamic fetch fails
-          poolId = "0x...SUI_USDC_POOL"; // placeholder
-        }
-
-        if (!poolId) return;
-
-        const currentPrice = await dbClient.midPrice(poolId);
+        // The poolKey for testnet SUI/USDC is 'SUI_DBUSDC'
+        const poolKey = 'SUI_DBUSDC';
+        const currentPrice = await dbClient.midPrice(poolKey);
         // The Floor is dynamic based on the Option contract, but for demo we set it slightly below spot
         const floorPrice = currentPrice * 0.95; 
 

@@ -18,6 +18,12 @@ export default function CreateStreamPage() {
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const router = useRouter();
 
+  React.useEffect(() => {
+    if (!currentAccount) {
+      router.push('/login');
+    }
+  }, [currentAccount, router]);
+
   const handleCreate = async () => {
     if (!currentAccount || !amount || !recipient) return;
     setIsExecuting(true);

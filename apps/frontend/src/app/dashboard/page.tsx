@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import PeachTextLogo from "@/components/PeachTextLogo";
 import TickingStreamRow from "@/components/TickingStreamRow";
 import ProtectionShieldGraph from "@/components/ProtectionShieldGraph";
@@ -14,6 +15,13 @@ const PACKAGE_ID = "0x25219b630a85a209ead80522fde59636ee514259208586e8475a176c85
 
 export default function DashboardPage() {
   const currentAccount = useCurrentAccount();
+  const router = useRouter();
+
+  React.useEffect(() => {
+    if (!currentAccount) {
+      router.push('/login');
+    }
+  }, [currentAccount, router]);
   
   const { data: streamsData, isPending } = useSuiClientQuery(
     'getOwnedObjects',
