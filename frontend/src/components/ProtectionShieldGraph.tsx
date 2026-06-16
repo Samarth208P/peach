@@ -4,7 +4,9 @@ import React, { useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 
 export default function ProtectionShieldGraph() {
-  const data = useMemo(() => {
+  const [data, setData] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
     const pts = [];
     let currentPrice = 1.0;
     const floorPrice = 0.85;
@@ -20,7 +22,7 @@ export default function ProtectionShieldGraph() {
         inTheMoney: currentPrice < floorPrice
       });
     }
-    return pts;
+    setData(pts);
   }, []);
 
   return (

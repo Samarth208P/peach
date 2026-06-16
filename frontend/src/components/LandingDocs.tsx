@@ -139,7 +139,7 @@ export default function LandingDocs() {
           <div id="system-stability" className="doc-block">
             <h3 className="text-2xl text-white font-medium mb-6 font-display">4. System Stability: The Volatility Surge Exception</h3>
             <p className="text-[#8a8690] text-lg leading-relaxed mb-6">
-              A major concern is a high-velocity market crash (where implied volatility <MathFormula math="\sigma" /> doubles instantly). Peach maintains a static risk tolerance profile: it never increases the 1% micro-allocation fee. Instead, if premium costs double, Peach's internal algorithm scales back the downside range position proportionally.
+              A major concern is a high-velocity market crash (where implied volatility <MathFormula math="\sigma" /> doubles instantly). Peach maintains a static risk tolerance profile: it never increases the 1% micro-allocation fee. Instead, if premium costs double, Peach&apos;s internal algorithm scales back the downside range position proportionally.
             </p>
             
             <div className="bg-[#0a0a0c] p-8 rounded-[24px] border border-white/[0.05] font-mono text-sm text-[#8a8690] whitespace-pre-wrap flex justify-center overflow-x-auto">

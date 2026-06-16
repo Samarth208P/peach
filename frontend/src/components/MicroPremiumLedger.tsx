@@ -12,18 +12,17 @@ interface LogEntry {
 }
 
 export default function MicroPremiumLedger() {
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-
-  useEffect(() => {
-    // Generate initial mock logs
-    const initialLogs: LogEntry[] = Array.from({ length: 5 }).map((_, i) => ({
+  const [logs, setLogs] = useState<LogEntry[]>(() => {
+    return Array.from({ length: 5 }).map((_, i) => ({
       id: Math.random().toString(36).substring(7),
       timestamp: new Date(Date.now() - i * 60000).toLocaleTimeString([], { hour12: false }),
       streamId: `st_${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
       premium: (Math.random() * 0.5 + 0.1).toFixed(3),
       txHash: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`
     }));
-    setLogs(initialLogs);
+  });
+
+  useEffect(() => {
 
     // Simulate incoming ledger events
     const interval = setInterval(() => {

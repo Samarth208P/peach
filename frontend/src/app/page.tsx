@@ -276,7 +276,7 @@ export default function LandingPage() {
           <div className="pin-card bg-white/[0.02] border border-white/[0.05] rounded-[40px] p-12 overflow-hidden group">
             <h3 className="text-2xl text-white font-medium mb-6 font-display">DeepBook Predict Integration</h3>
             <p className="text-[#8a8690] text-xl leading-relaxed mb-10 max-w-lg">
-              We leverage DeepBook V3's capital efficiency to accurately price options via a Black-Scholes invariant, ensuring minimal spread.
+              We leverage DeepBook V3&apos;s capital efficiency to accurately price options via a Black-Scholes invariant, ensuring minimal spread.
             </p>
             <div className="w-full h-80 rounded-[24px] bg-gradient-to-tr from-white/5 to-transparent relative overflow-hidden">
                <div className="absolute inset-0 bg-white/[0.02] group-hover:bg-white/[0.08] transition-colors duration-700" />
