@@ -75,33 +75,36 @@ export default function LandingPage() {
       }
 
       // Split Pin Scroll
-      if (pinSectionRef.current && pinLeftRef.current) {
-        ScrollTrigger.create({
-          trigger: pinSectionRef.current,
-          start: "top 10%",
-          end: "bottom bottom",
-          pin: pinLeftRef.current,
-          scrub: 1,
-        });
+      let mm = gsap.matchMedia();
+      mm.add("(min-width: 1024px)", () => {
+        if (pinSectionRef.current && pinLeftRef.current) {
+          ScrollTrigger.create({
+            trigger: pinSectionRef.current,
+            start: "top 10%",
+            end: "bottom bottom",
+            pin: pinLeftRef.current,
+            scrub: 1,
+          });
+        }
+      });
 
-        gsap.utils.toArray(".pin-card").forEach((card: any, i) => {
-          gsap.fromTo(card,
-            { y: 150, opacity: 0, scale: 0.95 },
-            {
-              y: 0,
-              opacity: 1,
-              scale: 1,
-              duration: 1.2,
-              ease: "expo.out",
-              scrollTrigger: {
-                trigger: card,
-                start: "top 85%",
-                toggleActions: "play reverse play reverse",
-              }
+      gsap.utils.toArray(".pin-card").forEach((card: any, i) => {
+        gsap.fromTo(card,
+          { y: 150, opacity: 0, scale: 0.95 },
+          {
+            y: 0,
+            opacity: 1,
+            scale: 1,
+            duration: 1.2,
+            ease: "expo.out",
+            scrollTrigger: {
+              trigger: card,
+              start: "top 85%",
+              toggleActions: "play reverse play reverse",
             }
-          );
-        });
-      }
+          }
+        );
+      });
 
       // Infinite Marquee
       if (marqueeRef.current) {
@@ -183,7 +186,7 @@ export default function LandingPage() {
       {/* Cinematic Hero */}
       <main className="flex flex-col items-center justify-center px-6 pt-[25vh] pb-48 relative z-10 min-h-[90vh]">
         <div className="w-full max-w-[90rem] mx-auto text-center relative z-20 flex flex-col items-center">
-          <h1 className="text-white font-display font-medium tracking-tight leading-[1.05] mb-12 flex flex-col items-center justify-center text-[clamp(4rem,8vw,8.5rem)]">
+          <h1 className="text-white font-display font-medium tracking-tight leading-[1.05] mb-12 flex flex-col items-center justify-center text-[clamp(3rem,5vw,5rem)]">
             <div className="overflow-hidden pb-2"><span className="hero-line block">Volatility-Insured</span></div>
             <div className="overflow-hidden pb-4 flex items-center justify-center flex-wrap gap-4">
               <span className="hero-line block">
@@ -211,7 +214,7 @@ export default function LandingPage() {
 
       {/* Scrub Text Reveal Section */}
       <section className="w-full max-w-5xl mx-auto px-6 py-48 relative z-10">
-        <div ref={textRevealRef} className="text-[clamp(2.5rem,5vw,4.5rem)] font-light leading-tight tracking-tight text-white font-display text-center">
+        <div ref={textRevealRef} className="text-[clamp(1.5rem,3vw,3rem)] font-light leading-tight tracking-tight text-white font-display text-center">
           {`We transform passive token flows into active, self-hedging assets. By seamlessly routing a 1% micro-margin into DeepBook Predict, your purchasing power remains 100% intact during market crashes.`.split(" ").map((word, i) => (
             <span key={i} className="reveal-word inline-block mr-3 mb-2">{word}</span>
           ))}
@@ -222,7 +225,7 @@ export default function LandingPage() {
       <section ref={marqueeRef} className="w-full overflow-hidden py-32 border-y border-white/[0.03] bg-white/[0.01] relative z-10">
         <div className="flex whitespace-nowrap w-[200%] marquee-inner">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="flex items-center gap-16 px-8 text-white/20 font-display text-[clamp(3rem,6vw,5rem)] uppercase tracking-widest font-bold">
+            <div key={i} className="flex items-center gap-16 px-8 text-white/20 font-display text-[clamp(1.5rem,3vw,2.5rem)] uppercase tracking-widest font-bold">
               <span>Zero Liquidation Risk</span>
               <span className="w-4 h-4 rounded-full bg-[#FD8566]"></span>
               <span>100M+ Value Streamed</span>
@@ -238,7 +241,7 @@ export default function LandingPage() {
       <section ref={pinSectionRef} id="platform" className="max-w-7xl w-full mx-auto px-6 py-48 flex flex-col lg:flex-row gap-20 relative z-10">
         <div className="lg:w-1/3">
           <div ref={pinLeftRef} className="pt-10">
-            <h2 className="text-[clamp(3.5rem,6vw,5.5rem)] font-display text-white leading-[1.05] tracking-tight mb-8">
+            <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-display text-white leading-[1.05] tracking-tight mb-8">
               The Mechanism.
             </h2>
             <p className="text-[#8a8690] text-xl font-light leading-relaxed max-w-sm">
@@ -249,7 +252,7 @@ export default function LandingPage() {
         
         <div className="lg:w-2/3 flex flex-col gap-16">
           <div className="pin-card bg-white/[0.02] border border-white/[0.05] rounded-[40px] p-12 overflow-hidden group">
-            <h3 className="text-4xl text-white font-medium mb-6 font-display">1% Micro-Margin Routing</h3>
+            <h3 className="text-2xl text-white font-medium mb-6 font-display">1% Micro-Margin Routing</h3>
             <p className="text-[#8a8690] text-xl leading-relaxed mb-10 max-w-lg">
               99% of your payment is streamed directly to the recipient as liquid assets. 1% is algorithmically routed to the Peach module.
             </p>
@@ -259,7 +262,7 @@ export default function LandingPage() {
           </div>
           
           <div className="pin-card bg-white/[0.02] border border-white/[0.05] rounded-[40px] p-12 overflow-hidden group">
-            <h3 className="text-4xl text-white font-medium mb-6 font-display">Automated PTB Hedging</h3>
+            <h3 className="text-2xl text-white font-medium mb-6 font-display">Automated PTB Hedging</h3>
             <p className="text-[#8a8690] text-xl leading-relaxed mb-10 max-w-lg">
               Programmable Transaction Blocks (PTBs) automatically extract the premium and mint downside put contracts natively every epoch.
             </p>
@@ -270,7 +273,7 @@ export default function LandingPage() {
           </div>
           
           <div className="pin-card bg-white/[0.02] border border-white/[0.05] rounded-[40px] p-12 overflow-hidden group">
-            <h3 className="text-4xl text-white font-medium mb-6 font-display">DeepBook Predict Integration</h3>
+            <h3 className="text-2xl text-white font-medium mb-6 font-display">DeepBook Predict Integration</h3>
             <p className="text-[#8a8690] text-xl leading-relaxed mb-10 max-w-lg">
               We leverage DeepBook V3's capital efficiency to accurately price options via a Black-Scholes invariant, ensuring minimal spread.
             </p>
@@ -283,12 +286,12 @@ export default function LandingPage() {
 
       {/* Gapless Bento Grid */}
       <section id="infrastructure" className="bento-grid-container max-w-7xl w-full mx-auto px-6 py-48 relative z-10">
-        <h2 className="text-center text-[clamp(3.5rem,6vw,5.5rem)] font-display text-white mb-24 tracking-tight">Enterprise Treasury</h2>
+        <h2 className="text-center text-[clamp(2rem,4vw,3.5rem)] font-display text-white mb-24 tracking-tight">Enterprise Treasury</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 auto-rows-[340px] gap-6 grid-flow-dense">
           <div className="bento-item col-span-1 md:col-span-2 row-span-2 bg-[#0a0a0c] rounded-[40px] border border-white/[0.05] p-16 relative overflow-hidden group">
              <div className="relative z-10 h-full flex flex-col justify-end">
-               <h3 className="text-5xl text-white font-medium mb-6 font-display">Macro Upside Capture</h3>
-               <p className="text-[#8a8690] text-2xl font-light max-w-md">While your downside is protected, you retain 100% of the upside. When the market surges, you walk away with massive net gains.</p>
+               <h3 className="text-3xl text-white font-medium mb-6 font-display">Macro Upside Capture</h3>
+               <p className="text-[#8a8690] text-lg font-light max-w-md">While your downside is protected, you retain 100% of the upside. When the market surges, you walk away with massive net gains.</p>
              </div>
              {/* Replace missing footer_bg_v2 with abstract gradient */}
              <div className="absolute inset-0 bg-gradient-to-t from-[#FD8566]/10 to-transparent mix-blend-screen opacity-20 group-hover:opacity-40 transition-opacity duration-[1.5s]" />
@@ -296,13 +299,13 @@ export default function LandingPage() {
           
           <div className="bento-item col-span-1 row-span-1 bg-white/[0.02] rounded-[40px] border border-white/[0.05] p-12 flex flex-col justify-end group overflow-hidden relative">
             <div className="absolute inset-0 bg-gradient-to-t from-white/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-            <h3 className="text-3xl text-white font-medium group-hover:text-[#FD8566] transition-colors duration-500 font-display">Zero Collateral</h3>
+            <h3 className="text-xl text-white font-medium group-hover:text-[#FD8566] transition-colors duration-500 font-display">Zero Collateral</h3>
             <p className="text-[#8a8690] mt-4 font-light">Additive insurance means no liquidations.</p>
           </div>
           
           <div className="bento-item col-span-1 row-span-1 bg-[#FD8566]/5 rounded-[40px] border border-[#FD8566]/10 p-12 flex flex-col justify-end group overflow-hidden relative">
              <div className="absolute top-10 right-10 w-16 h-16 bg-[#FD8566] rounded-full blur-2xl opacity-40 group-hover:opacity-80 transition-opacity duration-700" />
-            <h3 className="text-3xl text-white font-medium font-display">Instant Payouts</h3>
+            <h3 className="text-xl text-white font-medium font-display">Instant Payouts</h3>
             <p className="text-[#8a8690] mt-4 font-light">Options settle instantly to your stream wallet.</p>
           </div>
         </div>
