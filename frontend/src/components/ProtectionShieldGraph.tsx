@@ -1,10 +1,17 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 
+interface DataPoint {
+  time: number;
+  spot: number;
+  floor: number;
+  inTheMoney: boolean;
+}
+
 export default function ProtectionShieldGraph() {
-  const [data, setData] = React.useState<any[]>([]);
+  const [data, setData] = React.useState<DataPoint[]>([]);
 
   React.useEffect(() => {
     const pts = [];
@@ -22,7 +29,9 @@ export default function ProtectionShieldGraph() {
         inTheMoney: currentPrice < floorPrice
       });
     }
-    setData(pts);
+    setTimeout(() => {
+      setData(pts);
+    }, 0);
   }, []);
 
   return (

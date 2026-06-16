@@ -5,6 +5,7 @@ import MathFormula from "./MathFormula";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import mermaid from "mermaid";
 
 export default function LandingDocs() {
   const container = useRef<HTMLDivElement>(null);
@@ -24,6 +25,10 @@ export default function LandingDocs() {
         }
       }
     );
+
+    mermaid.initialize({ startOnLoad: false, theme: 'dark', background: 'transparent' });
+    mermaid.run({ querySelector: '.mermaid' }).catch(console.error);
+
   }, { scope: container });
 
   return (
@@ -142,13 +147,15 @@ export default function LandingDocs() {
               A major concern is a high-velocity market crash (where implied volatility <MathFormula math="\sigma" /> doubles instantly). Peach maintains a static risk tolerance profile: it never increases the 1% micro-allocation fee. Instead, if premium costs double, Peach&apos;s internal algorithm scales back the downside range position proportionally.
             </p>
             
-            <div className="bg-[#0a0a0c] p-8 rounded-[24px] border border-white/[0.05] font-mono text-sm text-[#8a8690] whitespace-pre-wrap flex justify-center overflow-x-auto">
-{`[ Market Volatility Spikes ] ──► [ OracleSVI Increases Option Premium ]
-                                              │
-                                              ▼
-                        [ Peach Adjusts Insurance Coverage Dynamically ]
-                        • Standard: 1% premium = 100% Downside Protected
-                        • Extreme: 1% premium = 85% Bounded Downside Floor`}
+            <div className="bg-[#0a0a0c] p-8 rounded-[24px] border border-white/[0.05] flex justify-center overflow-x-auto">
+              <div className="mermaid">
+{`flowchart TD
+    A[Market Volatility Spikes] --> B[OracleSVI Increases Option Premium]
+    B --> C[Peach Adjusts Insurance Coverage Dynamically]
+    C --> D[Standard: 1% premium = 100% Downside Protected]
+    C --> E[Extreme: 1% premium = 85% Bounded Downside Floor]
+`}
+              </div>
             </div>
           </div>
 
