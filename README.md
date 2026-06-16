@@ -18,7 +18,7 @@ Code snippet
 use deepbook::balance_manager::BalanceManager;
 use deepbook::predict::PredictPool; // The target native options pool
 
-public struct PeachStream has key {
+public struct PeachStream<phantom USDC> has key {
     id: UID,
     sender: address,
     receiver: address,
@@ -36,7 +36,7 @@ public struct PeachStream has key {
 When initializing the stream, the contract accepts the USDC coin from the PTB, registers it within its internal BalanceManager, and triggers the DeepBook Predict position mint.
 
 Code snippet
-public entry fun create_stream(
+public entry fun create_stream<USDC>(
     receiver: address,
     start_time: u64,
     end_time: u64,
@@ -86,8 +86,8 @@ public entry fun create_stream(
 Now, when the recipient claims their funds, the contract doesn't just passively hand over SUI. It queries the on-chain price oracle. If the price has dropped below the fixed strike_price, it programmatically triggers a proportional exercise of the options inside the same execution block.
 
 Code snippet
-public entry fun claim_stream(
-    stream: &mut PeachStream,
+public entry fun claim_stream<USDC>(
+    stream: &mut PeachStream<USDC>,
     predict_pool: &mut PredictPool,
     oracle_svi: &OracleSVI, // DeepBook V3's native Black-Scholes option oracle
     clock: &Clock,
@@ -115,7 +115,7 @@ public entry fun claim_stream(
         // The market has crashed! Auto-exercise a proportional slice of the option vault
         let exercise_volume = calculate_proportional_hedge(claimable_sui, stream.total_amount);
         
-        let usdc_payout_balance = deepbook::predict::exercise_and_withdraw(
+        let usdc_payout_balance = deepbook::predict::exercise_and_withdraw<USDC>(
             &mut stream.balance_manager,
             predict_pool,
             exercise_volume,
@@ -145,8 +145,8 @@ Code snippet
 /// Error code for unauthorized termination
 const ENotYourStream: u64 = 0;
 
-public entry fun cancel_stream(
-    stream: PeachStream, // Consumed entirely by value
+public entry fun cancel_stream<USDC>(
+    stream: PeachStream<USDC>, // Consumed entirely by value
     predict_pool: &mut PredictPool,
     oracle_svi: &OracleSVI,
     clock: &Clock,
@@ -167,6 +167,7 @@ public entry fun cancel_stream(
         mut balance_manager, // The nested DeepBook V3 ledger
         strike_price,
         option_expiry: _,
+        unexercised_hedge_volume,
     } = stream;
 
     // 2. Enforce absolute security access alignment
@@ -195,7 +196,7 @@ public entry fun cancel_stream(
         if (current_spot_price < strike_price) {
             let exercise_volume = calculate_proportional_hedge(earned_but_unclaimed, total_amount);
             
-            let usdc_payout_balance = deepbook::predict::exercise_and_withdraw(
+            let usdc_payout_balance = deepbook::predict::exercise_and_withdraw<USDC>(
                 &mut balance_manager,
                 predict_pool,
                 exercise_volume,
@@ -242,7 +243,7 @@ We need to add a dedicated state bucket (unexercised_hedge_volume) to act as a l
 
 Struct Modifications
 Code snippet
-public struct PeachStream has key {
+public struct PeachStream<phantom USDC> has key {
     id: UID,
     sender: address,
     receiver: address,
@@ -263,8 +264,8 @@ Make sure to initialize unexercised_hedge_volume: 0 inside your create_stream fu
 Now, inside claim_stream, we calculate the ideal hedge size, combine it with any previously deferred "dust," and perform a conditional gate check against DeepBook V3's pool metadata parameters before attempting an execution.
 
 Code snippet
-public entry fun claim_stream(
-    stream: &mut PeachStream,
+public entry fun claim_stream<USDC>(
+    stream: &mut PeachStream<USDC>,
     predict_pool: &mut PredictPool,
     oracle_svi: &OracleSVI,
     clock: &Clock,
@@ -301,7 +302,7 @@ public entry fun claim_stream(
             // EXECUTE: Volume is sufficient. Clear the accumulator buffer and exercise
             stream.unexercised_hedge_volume = 0;
 
-            let usdc_payout_balance = deepbook::predict::exercise_and_withdraw(
+            let usdc_payout_balance = deepbook::predict::exercise_and_withdraw<USDC>(
                 &mut stream.balance_manager,
                 predict_pool,
                 total_target_hedge,
