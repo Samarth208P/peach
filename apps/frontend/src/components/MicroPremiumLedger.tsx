@@ -3,14 +3,13 @@
 import React from "react";
 import { Terminal, ExternalLink } from "lucide-react";
 import { useSuiClientQuery } from '@mysten/dapp-kit';
-
-const PACKAGE_ID = "0x23b6f040c2c08d3d4b692d48d2c1f9826148a57893098f7d143458f2953763bc";
+import { PEACH_PACKAGE_ID } from "@/lib/constants";
 
 export default function MicroPremiumLedger() {
   const { data, isPending } = useSuiClientQuery(
     'queryEvents',
     {
-      query: { MoveEventType: `${PACKAGE_ID}::peach_stream::StreamCreated` },
+      query: { MoveEventType: `${PEACH_PACKAGE_ID}::peach_stream::StreamCreated` },
       order: 'descending',
       limit: 8
     },
@@ -21,7 +20,7 @@ export default function MicroPremiumLedger() {
     <div className="w-full h-full flex flex-col">
       <div className="flex items-center gap-3 mb-4">
         <Terminal size={18} className="text-[#8a8690]" />
-        <h3 className="text-white font-medium text-sm font-mono tracking-tight uppercase opacity-80">PTB Execution Ledger</h3>
+        <h3 className="text-white font-medium text-sm font-mono tracking-tight uppercase opacity-80">Stream Event Feed</h3>
       </div>
       
       <div className="flex-1 overflow-hidden bg-white/[0.02] backdrop-blur-md border border-white/[0.03] rounded-[20px] p-4">

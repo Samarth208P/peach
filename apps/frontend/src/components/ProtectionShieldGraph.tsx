@@ -70,7 +70,7 @@ export default function ProtectionShieldGraph() {
       active = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [suiClient]);
 
   return (
     <div className="w-full flex flex-col relative group bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-8 shadow-[0_0_30px_rgba(255,139,94,0.02)]">

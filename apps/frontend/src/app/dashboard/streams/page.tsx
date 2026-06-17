@@ -14,6 +14,8 @@ interface StreamConfig {
   targetValue: number;
   durationSeconds: number;
   elapsedSeconds: number;
+  startTimeMs: number;
+  endTimeMs: number;
   sender: string;
   receiver: string;
   strikePrice: number;
@@ -100,6 +102,8 @@ export default function StreamsPage() {
               targetValue: Number(fields.total_amount) / 1e9,
               durationSeconds: duration,
               elapsedSeconds: elapsed,
+              startTimeMs: startTime,
+              endTimeMs: endTime,
               sender: fields.sender,
               receiver: fields.receiver,
               strikePrice: Number(fields.strike_price) / 100_000_000, // 8-dp → USD

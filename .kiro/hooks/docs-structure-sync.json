@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Documentation & Structure Sync",
+      "trigger": "Stop",
+      "description": "Injects a prompt at session end to sync documentation with any architectural or logic changes made during the session.",
+      "action": {
+        "type": "agent",
+        "prompt": "Review the files modified during this execution. If there are architectural changes, new endpoints, or updated logic, immediately update the README.md and relevant documentation files to reflect them. Verify that the changes adhere to the established code structure and styling guidelines."
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Temp File Cleanup",
+      "trigger": "PostTaskExec",
+      "description": "Removes temporary files and directories (tmp/, *.log, *.tmp) after each spec task completes.",
+      "action": {
+        "type": "command",
+        "command": "bash -c \"rm -rf tmp/ *.log *.tmp\""
+      }
+    }
+  ]
+}

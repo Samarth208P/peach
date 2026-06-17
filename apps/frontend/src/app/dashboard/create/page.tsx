@@ -10,7 +10,6 @@ import gsap from "gsap";
 import {
   PEACH_PACKAGE_ID,
   USDC_TYPE,
-  SUI_CLOCK_OBJECT_ID,
 } from "@/lib/constants";
 
 export default function CreateStreamPage() {

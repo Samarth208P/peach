@@ -1,17 +1,24 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ArrowUpRight, ArrowDownLeft, ShieldCheck, RefreshCw } from "lucide-react";
 import { Transaction } from "@mysten/sui/transactions";
-import { useSignAndExecuteTransaction } from "@mysten/dapp-kit";
+import { useSignAndExecuteTransaction, useSuiClient } from "@mysten/dapp-kit";
+import { Buffer } from "buffer";
+import { SuiPythClient } from "@pythnetwork/pyth-sui-js";
+import { HermesClient } from "@pythnetwork/hermes-client";
+import { useToast } from "@/components/ToastProvider";
 
 import { 
   PEACH_PACKAGE_ID, 
-  PYTH_SUI_USD_PRICE_INFO_OBJECT_ID, 
   DEEPBOOK_SUI_USDC_POOL_ID, 
   DEEP_TOKEN_TYPE, 
   USDC_TYPE, 
-  SUI_CLOCK_OBJECT_ID 
+  SUI_CLOCK_OBJECT_ID,
+  PYTH_HERMES_BASE_URL,
+  PYTH_SUI_USD_FEED_ID,
+  PYTH_STATE_ID,
+  WORMHOLE_STATE_ID
 } from "@/lib/constants";
 
 interface StreamConfig {
@@ -20,92 +27,144 @@ interface StreamConfig {
   targetValue: number;
   durationSeconds: number;
   elapsedSeconds: number;
+  startTimeMs: number;
+  endTimeMs: number;
   sender: string;
   receiver: string;
 }
 
 export default function TickingStreamRow({ config }: { config: StreamConfig }) {
-  const [balance, setBalance] = useState(0);
-  const startTimeRef = useRef<number | null>(null);
-  const initialValueRef = useRef<number>(0);
+  const [balance, setBalance] = useState(() => {
+    const velocity = config.targetValue / config.durationSeconds;
+    const now = Date.now();
+    const elapsed = Math.max(0, Math.min(now - config.startTimeMs, config.endTimeMs - config.startTimeMs)) / 1000;
+    return elapsed * velocity;
+  });
+  const [isProcessing, setIsProcessing] = useState(false);
   
+  const suiClient = useSuiClient();
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const { toast } = useToast();
+
+  const preparePythUpdate = async (tx: Transaction) => {
+    const hermes = new HermesClient(PYTH_HERMES_BASE_URL, {});
+    const priceUpdates = await hermes.getLatestPriceUpdates([PYTH_SUI_USD_FEED_ID]);
+    const bufferUpdates = priceUpdates.binary.data.map((hex: string) => Buffer.from(hex, 'hex'));
+    
+    const pythClient = new SuiPythClient(suiClient as any, PYTH_STATE_ID, WORMHOLE_STATE_ID);
+    
+    // Check if feed exists on-chain
+    let objectId = await pythClient.getPriceFeedObjectId(PYTH_SUI_USD_FEED_ID);
+    
+    if (!objectId) {
+      console.log("Price feed does not exist. Initializing oracle feed on-chain...");
+      const initTx = new Transaction();
+      await pythClient.createPriceFeed(initTx as any, bufferUpdates);
+      await signAndExecuteTransaction({ transaction: initTx });
+      
+      console.log("Oracle initialized! Waiting for RPC sync...");
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Refetch object ID
+      objectId = await pythClient.getPriceFeedObjectId(PYTH_SUI_USD_FEED_ID);
+      if (!objectId) throw new Error("Failed to retrieve newly created PriceFeed ObjectId");
+    }
+    
+    const priceInfoObjectIds = await pythClient.updatePriceFeeds(tx as any, bufferUpdates, [PYTH_SUI_USD_FEED_ID]);
+    return priceInfoObjectIds[0];
+  };
 
   const executeClaimTransaction = async (streamObjectId: string) => {
-    const tx = new Transaction();
-
-    const deepCoin = tx.moveCall({
-      target: "0x2::coin::zero",
-      typeArguments: [DEEP_TOKEN_TYPE],
-    });
-
-    tx.moveCall({
-      target: `${PEACH_PACKAGE_ID}::peach_stream::claim_stream`,
-      arguments: [
-        tx.object(streamObjectId),
-        tx.object(PYTH_SUI_USD_PRICE_INFO_OBJECT_ID),
-        tx.object(DEEPBOOK_SUI_USDC_POOL_ID),
-        deepCoin,
-        tx.object(SUI_CLOCK_OBJECT_ID),
-      ],
-      typeArguments: [USDC_TYPE],
-    });
-
+    if (isProcessing) return;
+    setIsProcessing(true);
+    
     try {
+      const tx = new Transaction();
+      
+      const priceInfoObjectId = await preparePythUpdate(tx);
+
+      const deepCoin = tx.moveCall({
+        target: "0x2::coin::zero",
+        typeArguments: [DEEP_TOKEN_TYPE],
+      });
+
+      tx.moveCall({
+        target: `${PEACH_PACKAGE_ID}::peach_stream::claim_stream`,
+        arguments: [
+          tx.object(streamObjectId),
+          tx.object(priceInfoObjectId),
+          tx.object(DEEPBOOK_SUI_USDC_POOL_ID),
+          deepCoin,
+          tx.object(SUI_CLOCK_OBJECT_ID),
+        ],
+        typeArguments: [USDC_TYPE],
+      });
+
       await signAndExecuteTransaction({ transaction: tx });
-      console.log("Claim Successful");
+      toast("Stream claimed successfully.", "success");
     } catch (e) {
       console.error("Claim Failed", e);
+      toast("Claim failed. Please try again.", "error");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const executeCancelTransaction = async (streamObjectId: string) => {
-    const tx = new Transaction();
-
-    const deepCoin = tx.moveCall({
-      target: "0x2::coin::zero",
-      typeArguments: [DEEP_TOKEN_TYPE],
-    });
-
-    tx.moveCall({
-      target: `${PEACH_PACKAGE_ID}::peach_stream::cancel_stream`,
-      arguments: [
-        tx.object(streamObjectId),
-        tx.object(PYTH_SUI_USD_PRICE_INFO_OBJECT_ID),
-        tx.object(DEEPBOOK_SUI_USDC_POOL_ID),
-        deepCoin,
-        tx.object(SUI_CLOCK_OBJECT_ID),
-      ],
-      typeArguments: [USDC_TYPE],
-    });
-
+    if (isProcessing) return;
+    setIsProcessing(true);
+    
     try {
+      const tx = new Transaction();
+      
+      const priceInfoObjectId = await preparePythUpdate(tx);
+
+      const deepCoin = tx.moveCall({
+        target: "0x2::coin::zero",
+        typeArguments: [DEEP_TOKEN_TYPE],
+      });
+
+      tx.moveCall({
+        target: `${PEACH_PACKAGE_ID}::peach_stream::cancel_stream`,
+        arguments: [
+          tx.object(streamObjectId),
+          tx.object(priceInfoObjectId),
+          tx.object(DEEPBOOK_SUI_USDC_POOL_ID),
+          deepCoin,
+          tx.object(SUI_CLOCK_OBJECT_ID),
+        ],
+        typeArguments: [USDC_TYPE],
+      });
+
       await signAndExecuteTransaction({ transaction: tx });
-      console.log("Cancel Successful");
+      toast("Stream cancelled. Funds returned.", "success");
     } catch (e) {
       console.error("Cancel Failed", e);
+      toast("Cancel failed. Please try again.", "error");
+    } finally {
+      setIsProcessing(false);
     }
   };
   
   useEffect(() => {
-    // Reset start time on effect run
-    startTimeRef.current = null;
-    
-    // Initial value based on elapsed seconds
     const velocity = config.targetValue / config.durationSeconds;
-    initialValueRef.current = config.elapsedSeconds * velocity;
-    setBalance(initialValueRef.current);
 
     let animationFrameId: number;
-    const tick = (timestamp: number) => {
-      if (!startTimeRef.current) startTimeRef.current = timestamp;
+    const tick = () => {
+      const currentNow = Date.now();
       
-      const elapsedMs = timestamp - startTimeRef.current;
-      const additionalValue = (velocity * elapsedMs) / 1000;
+      if (currentNow < config.startTimeMs) {
+        // Hasn't started yet, keep checking
+        animationFrameId = requestAnimationFrame(tick);
+        return;
+      }
       
-      const currentBalance = initialValueRef.current + additionalValue;
-      if (currentBalance < config.targetValue) {
-        setBalance(currentBalance);
+      const elapsed = Math.max(0, Math.min(currentNow - config.startTimeMs, config.endTimeMs - config.startTimeMs)) / 1000;
+      const currentBalance = elapsed * velocity;
+      
+      setBalance(currentBalance);
+      
+      if (currentNow < config.endTimeMs) {
         animationFrameId = requestAnimationFrame(tick);
       } else {
         setBalance(config.targetValue);
@@ -114,7 +173,7 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
 
     animationFrameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [config.targetValue, config.durationSeconds, config.elapsedSeconds]);
+  }, [config.targetValue, config.durationSeconds, config.startTimeMs, config.endTimeMs]);
 
   const percentage = Math.min((balance / config.targetValue) * 100, 100);
 
@@ -152,17 +211,19 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
             {(config.type === "inbound" || config.type === "self") && (
               <button 
                 onClick={() => executeClaimTransaction(config.id)}
-                className="px-4 py-1.5 bg-[#FF8B5E] text-[#060608] text-xs font-semibold tracking-wide rounded-lg hover:bg-[#FF8B5E]/90 transition-colors shadow-[0_0_15px_rgba(255,139,94,0.15)]"
+                disabled={isProcessing}
+                className="px-4 py-1.5 bg-[#FF8B5E] text-[#060608] text-xs font-semibold tracking-wide rounded-lg hover:bg-[#FF8B5E]/90 transition-colors shadow-[0_0_15px_rgba(255,139,94,0.15)] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Claim
+                {isProcessing ? "Processing..." : "Claim"}
               </button>
             )}
             {(config.type === "outbound" || config.type === "self") && (
               <button 
                 onClick={() => executeCancelTransaction(config.id)}
-                className="px-4 py-1.5 bg-[#0d0d10] border border-white/5 text-[#e8e4df] text-xs font-medium rounded-lg hover:bg-[#141418] transition-colors"
+                disabled={isProcessing}
+                className="px-4 py-1.5 bg-[#0d0d10] border border-white/5 text-[#e8e4df] text-xs font-medium rounded-lg hover:bg-[#141418] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Cancel
+                {isProcessing ? "Processing..." : "Cancel"}
               </button>
             )}
           </div>

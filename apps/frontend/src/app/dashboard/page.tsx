@@ -11,7 +11,7 @@ import MicroPremiumLedger from "@/components/MicroPremiumLedger";
 import { Plus, LayoutDashboard, Wallet, Activity } from "lucide-react";
 import { useCurrentAccount, useSuiClientQuery, useSuiClient } from "@mysten/dapp-kit";
 
-const PACKAGE_ID = "0x23b6f040c2c08d3d4b692d48d2c1f9826148a57893098f7d143458f2953763bc";
+import { PEACH_PACKAGE_ID } from "@/lib/constants";
 
 export default function DashboardPage() {
   const currentAccount = useCurrentAccount();
@@ -20,6 +20,7 @@ export default function DashboardPage() {
 
   const [activeStreams, setActiveStreams] = React.useState<any[]>([]);
   const [isPending, setIsPending] = React.useState(true);
+  const [filterType, setFilterType] = React.useState<"all" | "outbound" | "inbound">("all");
 
   React.useEffect(() => {
     if (!currentAccount) {
@@ -31,7 +32,7 @@ export default function DashboardPage() {
     'queryEvents',
     {
       query: {
-        MoveEventType: `${PACKAGE_ID}::peach_stream::StreamCreated`,
+        MoveEventType: `${PEACH_PACKAGE_ID}::peach_stream::StreamCreated`,
       },
       order: 'descending',
     },
@@ -40,6 +41,29 @@ export default function DashboardPage() {
       refetchInterval: 5000
     }
   );
+
+  // Query HedgeTriggered events for real hedge volume
+  const { data: hedgeEventsData } = useSuiClientQuery(
+    'queryEvents',
+    {
+      query: {
+        MoveEventType: `${PEACH_PACKAGE_ID}::peach_stream::HedgeTriggered`,
+      },
+      order: 'descending',
+    },
+    {
+      enabled: !!currentAccount,
+      refetchInterval: 10000
+    }
+  );
+
+  const totalHedgedSui = React.useMemo(() => {
+    if (!hedgeEventsData?.data) return 0;
+    return hedgeEventsData.data.reduce((acc, event) => {
+      const d = event.parsedJson as any;
+      return acc + Number(d.sui_swapped || 0) / 1e9;
+    }, 0);
+  }, [hedgeEventsData]);
 
   React.useEffect(() => {
     async function hydrateSharedObjects() {
@@ -79,12 +103,21 @@ export default function DashboardPage() {
             const durationSeconds = end > start ? (end - start) / 1000 : 30 * 24 * 60 * 60;
             const elapsedSeconds = start > 0 ? Math.max(0, (Date.now() - start) / 1000) : 0;
 
+            let type = "self";
+            if (fields?.sender === currentAccount?.address && fields?.receiver !== currentAccount?.address) {
+              type = "outbound";
+            } else if (fields?.receiver === currentAccount?.address && fields?.sender !== currentAccount?.address) {
+              type = "inbound";
+            }
+
             return {
               id: obj.data?.objectId,
-              type: fields?.receiver === currentAccount?.address ? "self" : "outbound",
+              type: type,
               targetValue: fields?.total_amount ? Number(fields.total_amount) / 1_000_000_000 : 0,
               durationSeconds: durationSeconds,
               elapsedSeconds: elapsedSeconds, 
+              startTimeMs: start,
+              endTimeMs: end,
               sender: fields?.sender || "",
               receiver: fields?.receiver || ""
             };
@@ -104,8 +137,13 @@ export default function DashboardPage() {
   const totalVolume = activeStreams.reduce((acc, curr) => acc + curr.targetValue, 0);
   const outCount = activeStreams.filter(s => s.sender === currentAccount?.address).length;
   const inCount = activeStreams.filter(s => s.receiver === currentAccount?.address).length;
-  
-  const impliedVolatility = Math.min(95.5, 42.1 + (totalVolume * 0.15)).toFixed(1);
+
+  const filteredStreams = activeStreams.filter(stream => {
+    if (filterType === "all") return true;
+    if (filterType === "outbound") return stream.type === "outbound" || stream.type === "self";
+    if (filterType === "inbound") return stream.type === "inbound" || stream.type === "self";
+    return true;
+  });
 
   return (
     <div className="flex flex-col font-sans w-full relative z-10">
@@ -152,9 +190,15 @@ export default function DashboardPage() {
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl text-white font-display font-medium tracking-tight">Active Streams Queue</h2>
                 <div className="flex bg-white/[0.03] p-1 rounded-lg">
-                  <button className="px-4 py-1.5 rounded-md bg-white/[0.08] text-white text-xs font-medium">All</button>
-                  <button className="px-4 py-1.5 rounded-md text-[#8a8690] hover:text-white text-xs transition-colors">Outbound</button>
-                  <button className="px-4 py-1.5 rounded-md text-[#8a8690] hover:text-white text-xs transition-colors">Inbound</button>
+                  <button 
+                    onClick={() => setFilterType("all")}
+                    className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${filterType === "all" ? "bg-white/[0.08] text-white" : "text-[#8a8690] hover:text-white"}`}>All</button>
+                  <button 
+                    onClick={() => setFilterType("outbound")}
+                    className={`px-4 py-1.5 rounded-md text-xs transition-colors ${filterType === "outbound" ? "bg-white/[0.08] text-white" : "text-[#8a8690] hover:text-white"}`}>Outbound</button>
+                  <button 
+                    onClick={() => setFilterType("inbound")}
+                    className={`px-4 py-1.5 rounded-md text-xs transition-colors ${filterType === "inbound" ? "bg-white/[0.08] text-white" : "text-[#8a8690] hover:text-white"}`}>Inbound</button>
                 </div>
               </div>
               
@@ -163,8 +207,10 @@ export default function DashboardPage() {
                   <div className="text-center text-[#8a8690] py-10">Fetching live streams...</div>
                 ) : activeStreams.length === 0 ? (
                   <div className="text-center text-[#8a8690] py-10">No active streams found. Create one!</div>
+                ) : filteredStreams.length === 0 ? (
+                  <div className="text-center text-[#8a8690] py-10">No streams match the selected filter.</div>
                 ) : (
-                  activeStreams.map((stream: any) => (
+                  filteredStreams.map((stream: any) => (
                     <TickingStreamRow key={stream.id} config={stream} />
                   ))
                 )}
@@ -183,17 +229,17 @@ export default function DashboardPage() {
             <div className="bg-[#FD8566] text-black border border-[#FD8566] rounded-[32px] p-8 min-h-[250px] flex flex-col justify-between relative overflow-hidden group">
               <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-20 blur-[100px] pointer-events-none group-hover:opacity-30 transition-opacity duration-1000" />
               <div className="relative z-10">
-                <h2 className="text-2xl font-display font-bold tracking-tight mb-2">DeepBook Predict Vault</h2>
+                <h2 className="text-2xl font-display font-bold tracking-tight mb-2">DeepBook Hedge Engine</h2>
                 <p className="text-black/70 font-medium">Real-time Exposure & Collateral</p>
               </div>
               <div className="relative z-10 flex flex-col gap-2 mt-8">
                 <div className="flex justify-between items-center pb-2 border-b border-black/10">
-                  <span className="font-mono text-sm opacity-80">Active Put Options</span>
+                  <span className="font-mono text-sm opacity-80">Active Hedge Streams</span>
                   <span className="font-mono font-bold">{outCount} {outCount === 1 ? 'Contract' : 'Contracts'}</span>
                 </div>
                 <div className="flex justify-between items-center pb-2 border-b border-black/10">
-                  <span className="font-mono text-sm opacity-80">Implied Volatility (σ)</span>
-                  <span className="font-mono font-bold">{outCount > 0 ? impliedVolatility : "0.0"}%</span>
+                  <span className="font-mono text-sm opacity-80">Total Hedged</span>
+                  <span className="font-mono font-bold">{totalHedgedSui.toLocaleString(undefined, { maximumFractionDigits: 2 })} SUI</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="font-mono text-sm opacity-80">Solvency Status</span>

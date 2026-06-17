@@ -17,8 +17,7 @@ export default function TreasuryPage() {
   const suiClient = useSuiClient();
 
   const [totalLocked, setTotalLocked] = useState(0);
-  const [usdcPortfolio, setUsdcPortfolio] = useState(0);
-  const [hedgingPremium, setHedgingPremium] = useState(0);
+  const [pythSpotPrice, setPythSpotPrice] = useState(1.42);
   const [totalSalvaged, setTotalSalvaged] = useState(0);
   const [salvageLedger, setSalvageLedger] = useState<SalvageRecord[]>([]);
   const [isFetchingObjects, setIsFetchingObjects] = useState(false);
@@ -41,17 +40,34 @@ export default function TreasuryPage() {
     }
   );
 
+  // Dedicated Pyth price fetch — updates independently from event processing
   useEffect(() => {
-    let activeSpot = 1.42;
-    // Fetch live SUI/USD price from Pyth Hermes REST API
-    fetch(`${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${PYTH_SUI_USD_FEED_ID}`)
-      .then(r => r.json())
-      .then(json => {
+    const fetchPrice = async () => {
+      try {
+        const res = await fetch(
+          `${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${PYTH_SUI_USD_FEED_ID}`
+        );
+        const json = await res.json();
         const parsed = json?.parsed?.[0]?.price;
-        if (parsed) activeSpot = parseFloat(parsed.price) * Math.pow(10, parsed.expo);
-      })
-      .catch(() => {});
+        if (parsed) {
+          const price = parseFloat(parsed.price) * Math.pow(10, parsed.expo);
+          setPythSpotPrice(price);
+        }
+      } catch {
+        // Keep last known price on failure
+      }
+    };
+    fetchPrice();
+    const interval = setInterval(fetchPrice, 10_000);
+    return () => clearInterval(interval);
+  }, []);
 
+  // Compute USDC value and hedging premium reactively from pythSpotPrice + totalLocked
+  const usdcPortfolio = totalLocked * pythSpotPrice;
+  const hedgingPremium = totalLocked * 0.01 * pythSpotPrice;
+
+  // Process on-chain events for locked totals and salvage ledger
+  useEffect(() => {
     if (currentAccount && canceledEvents) {
       // Process Corporate Salvage
       const userCanceled = canceledEvents.data.filter(event => {
@@ -97,14 +113,10 @@ export default function TreasuryPage() {
             }
           });
           setTotalLocked(lockedSum);
-          setUsdcPortfolio(lockedSum * activeSpot);
-          setHedgingPremium(lockedSum * 0.01 * activeSpot);
           setIsFetchingObjects(false);
         }).catch(() => setIsFetchingObjects(false));
       } else {
         setTotalLocked(0);
-        setUsdcPortfolio(0);
-        setHedgingPremium(0);
       }
     }
   }, [createdEvents, canceledEvents, currentAccount, suiClient]);

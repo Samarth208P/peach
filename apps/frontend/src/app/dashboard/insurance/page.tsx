@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Shield, TrendingDown, DollarSign, Lock, Zap, Activity } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
+import { Shield, TrendingDown, Lock, Zap, Activity } from "lucide-react";
 import { useSuiClientQuery, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { PEACH_PACKAGE_ID, PYTH_HERMES_BASE_URL, PYTH_SUI_USD_FEED_ID } from "@/lib/constants";
 
@@ -25,7 +25,6 @@ export default function InsurancePage() {
   const currentAccount = useCurrentAccount();
   const suiClient = useSuiClient();
   const [activeProtections, setActiveProtections] = useState<StreamProtection[]>([]);
-  const [hedgeEvents, setHedgeEvents] = useState<HedgeEvent[]>([]);
   const [protectedVolume, setProtectedVolume] = useState(0);
   const [pythSpotPrice, setPythSpotPrice] = useState<number | null>(null);
   const [isFetching, setIsFetching] = useState(false);
@@ -68,20 +67,19 @@ export default function InsurancePage() {
     }
   );
 
-  useEffect(() => {
-    if (hedgeEventData) {
-      const events: HedgeEvent[] = hedgeEventData.data.map((e) => {
-        const d = e.parsedJson as any;
-        return {
-          streamId: d.stream_id,
-          spotPrice: Number(d.spot_price) / 100_000_000,
-          strikePrice: Number(d.strike_price) / 100_000_000,
-          suiSwapped: Number(d.sui_swapped) / 1e9,
-          timestamp: Number(e.timestampMs),
-        };
-      });
-      setHedgeEvents(events);
-    }
+  // Derive hedgeEvents from query data — no separate state needed
+  const hedgeEvents = useMemo<HedgeEvent[]>(() => {
+    if (!hedgeEventData?.data) return [];
+    return hedgeEventData.data.map((e) => {
+      const d = e.parsedJson as any;
+      return {
+        streamId: d.stream_id,
+        spotPrice: Number(d.spot_price) / 100_000_000,
+        strikePrice: Number(d.strike_price) / 100_000_000,
+        suiSwapped: Number(d.sui_swapped) / 1e9,
+        timestamp: Number(e.timestampMs),
+      };
+    });
   }, [hedgeEventData]);
 
   useEffect(() => {
@@ -224,12 +222,16 @@ export default function InsurancePage() {
               const now = Date.now();
               const daysLeft = Math.max(0, Math.ceil((p.endTime - now) / (1000 * 60 * 60 * 24)));
               const spotNum = pythSpotPrice ?? 0;
-              const statusColor =
-                spotNum > 0 && spotNum < p.strikePrice
-                  ? "bg-[#FD8566]/15 text-[#FD8566]"
-                  : "bg-green-500/10 text-green-400";
-              const statusLabel =
-                spotNum > 0 && spotNum < p.strikePrice ? "⚡ Hedging Active" : "✓ Protected";
+              let statusColor = "bg-green-500/10 text-green-400";
+              let statusLabel = "✓ Protected";
+              
+              if (p.isHedged) {
+                statusColor = "bg-green-500/10 text-green-400";
+                statusLabel = "✓ Hedging Completed";
+              } else if (spotNum > 0 && spotNum < p.strikePrice) {
+                statusColor = "bg-[#FD8566]/15 text-[#FD8566]";
+                statusLabel = "Hedging Active";
+              }
 
               return (
                 <div
