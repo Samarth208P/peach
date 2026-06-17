@@ -380,4 +380,25 @@ module peach_contracts::peach_stream {
         };
         if (cumulative > stream.withdrawn) { cumulative - stream.withdrawn } else { 0u64 }
     }
+
+    public struct SetupEvents has copy, drop {
+        predict_pool_id: ID,
+        oracle_svi_id: ID,
+    }
+
+    public entry fun setup_mock_objects(ctx: &mut TxContext) {
+        let predict_pool = predict::create_pool(1000, ctx);
+        let oracle_svi = oracle::create_oracle(1_000_000, ctx);
+        
+        let predict_pool_id = sui::object::id(&predict_pool);
+        let oracle_svi_id = sui::object::id(&oracle_svi);
+        
+        event::emit(SetupEvents {
+            predict_pool_id,
+            oracle_svi_id,
+        });
+        
+        sui::transfer::public_share_object(predict_pool);
+        sui::transfer::public_share_object(oracle_svi);
+    }
 }

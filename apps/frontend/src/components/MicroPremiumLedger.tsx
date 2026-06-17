@@ -4,13 +4,13 @@ import React from "react";
 import { Terminal, ExternalLink } from "lucide-react";
 import { useSuiClientQuery } from '@mysten/dapp-kit';
 
-const PACKAGE_ID = "0x49c002ce2aadfa23c699394e44be190188a9ec6ea0d2b8b3c23dce7779904d22";
+const PACKAGE_ID = "0x23b6f040c2c08d3d4b692d48d2c1f9826148a57893098f7d143458f2953763bc";
 
 export default function MicroPremiumLedger() {
   const { data, isPending } = useSuiClientQuery(
     'queryEvents',
     {
-      query: { MoveEventType: `${PACKAGE_ID}::peach_stream::StreamCreatedEvent` },
+      query: { MoveEventType: `${PACKAGE_ID}::peach_stream::StreamCreated` },
       order: 'descending',
       limit: 8
     },
@@ -39,8 +39,8 @@ export default function MicroPremiumLedger() {
               const parsedJson = event.parsedJson as any;
               const timestamp = new Date(Number(event.timestampMs)).toLocaleTimeString([], { hour12: false });
               const streamId = `st_${parsedJson.stream_id.substring(0, 6).toUpperCase()}`;
-              // Convert mist to SUI
-              const premiumSUI = (Number(parsedJson.premium_amount) / 1_000_000_000).toFixed(3);
+              // Convert 1% premium of total_amount mist to SUI
+              const premiumSUI = ((Number(parsedJson.total_amount) * 0.01) / 1_000_000_000).toFixed(3);
               const txHash = `${event.id.txDigest.substring(0, 6)}...${event.id.txDigest.substring(event.id.txDigest.length - 4)}`;
               const explorerLink = `https://testnet.suivision.xyz/txblock/${event.id.txDigest}`;
 
