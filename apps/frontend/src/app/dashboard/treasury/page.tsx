@@ -3,9 +3,7 @@
 import { useEffect, useState } from "react";
 import { Wallet, PieChart, Coins, Briefcase, ArrowUpRight, Clock } from "lucide-react";
 import { useSuiClientQuery, useCurrentAccount, useSuiClient } from '@mysten/dapp-kit';
-import { DeepBookClient } from '@mysten/deepbook-v3';
-
-const PACKAGE_ID = "0xfeded63bda28be37a34d937fe8dfe8c294596a26f4c9805128812edfd085c025";
+import { PEACH_PACKAGE_ID, PYTH_HERMES_BASE_URL, PYTH_SUI_USD_FEED_ID } from "@/lib/constants";
 
 interface SalvageRecord {
   id: string;
@@ -29,7 +27,7 @@ export default function TreasuryPage() {
   const { data: createdEvents, isLoading: isCreatedLoading } = useSuiClientQuery(
     'queryEvents',
     {
-      query: { MoveEventType: `${PACKAGE_ID}::peach_stream::StreamCreated` },
+      query: { MoveEventType: `${PEACH_PACKAGE_ID}::peach_stream::StreamCreated` },
       order: 'descending',
     }
   );
@@ -38,15 +36,21 @@ export default function TreasuryPage() {
   const { data: canceledEvents, isLoading: isCanceledLoading } = useSuiClientQuery(
     'queryEvents',
     {
-      query: { MoveEventType: `${PACKAGE_ID}::peach_stream::StreamCanceled` },
+      query: { MoveEventType: `${PEACH_PACKAGE_ID}::peach_stream::StreamCanceled` },
       order: 'descending',
     }
   );
 
   useEffect(() => {
     let activeSpot = 1.42;
-    const dbClient = new DeepBookClient({ client: suiClient, network: 'testnet', address: '0x0000000000000000000000000000000000000000000000000000000000000000' });
-    dbClient.midPrice('SUI_DBUSDC').then(price => activeSpot = price).catch(() => {});
+    // Fetch live SUI/USD price from Pyth Hermes REST API
+    fetch(`${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${PYTH_SUI_USD_FEED_ID}`)
+      .then(r => r.json())
+      .then(json => {
+        const parsed = json?.parsed?.[0]?.price;
+        if (parsed) activeSpot = parseFloat(parsed.price) * Math.pow(10, parsed.expo);
+      })
+      .catch(() => {});
 
     if (currentAccount && canceledEvents) {
       // Process Corporate Salvage

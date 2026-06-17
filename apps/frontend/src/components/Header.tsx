@@ -48,9 +48,6 @@ export default function Header() {
 
         {/* CTA */}
         <div className="flex items-center gap-6 z-20">
-          <Link href="/login" className="text-[13px] font-medium text-[#8a8690] hover:text-white transition-colors hidden sm:block">
-            Sign in
-          </Link>
           <Link href="/dashboard" className="group relative flex items-center justify-center text-[13px] font-medium bg-white text-black px-6 py-2.5 rounded-full hover:scale-105 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
             <span className="relative z-10">Dashboard</span>
             <div className="absolute inset-0 rounded-full bg-white opacity-0 group-hover:opacity-20 blur-md transition-opacity duration-500"></div>

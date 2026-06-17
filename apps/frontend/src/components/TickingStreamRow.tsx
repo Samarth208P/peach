@@ -5,10 +5,14 @@ import { ArrowUpRight, ArrowDownLeft, ShieldCheck, RefreshCw } from "lucide-reac
 import { Transaction } from "@mysten/sui/transactions";
 import { useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 
-const PACKAGE_ID = "0xfeded63bda28be37a34d937fe8dfe8c294596a26f4c9805128812edfd085c025";
-const DEEPBOOK_PREDICT_POOL_ID = "0x3b1cfc560205d12a23bb800bc19e342718a3d58de41bb33cf517d925e01ba062";
-const OPTION_USDC_TYPE = "0x0111111111111111111111111111111111111111111111111111111111111111::db_usdc::DB_USDC";
-const ORACLE_SVI_TESTNET_OBJECT_ID = "0xORACLE_SVI_TESTNET_OBJECT_ID";
+import { 
+  PEACH_PACKAGE_ID, 
+  PYTH_SUI_USD_PRICE_INFO_OBJECT_ID, 
+  DEEPBOOK_SUI_USDC_POOL_ID, 
+  DEEP_TOKEN_TYPE, 
+  USDC_TYPE, 
+  SUI_CLOCK_OBJECT_ID 
+} from "@/lib/constants";
 
 interface StreamConfig {
   id: string;
@@ -30,15 +34,21 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
   const executeClaimTransaction = async (streamObjectId: string) => {
     const tx = new Transaction();
 
+    const deepCoin = tx.moveCall({
+      target: "0x2::coin::zero",
+      typeArguments: [DEEP_TOKEN_TYPE],
+    });
+
     tx.moveCall({
-      target: `${PACKAGE_ID}::peach_stream::claim_stream`,
+      target: `${PEACH_PACKAGE_ID}::peach_stream::claim_stream`,
       arguments: [
-        tx.object(streamObjectId),                     // Target Shared Stream Object
-        tx.object(DEEPBOOK_PREDICT_POOL_ID),          // DeepBook Predict Pool ID
-        tx.object(ORACLE_SVI_TESTNET_OBJECT_ID),       // OracleSVI Object Pointer
-        tx.object("0x6"),                              // System Clock
+        tx.object(streamObjectId),
+        tx.object(PYTH_SUI_USD_PRICE_INFO_OBJECT_ID),
+        tx.object(DEEPBOOK_SUI_USDC_POOL_ID),
+        deepCoin,
+        tx.object(SUI_CLOCK_OBJECT_ID),
       ],
-      typeArguments: [OPTION_USDC_TYPE],
+      typeArguments: [USDC_TYPE],
     });
 
     try {
@@ -52,15 +62,21 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
   const executeCancelTransaction = async (streamObjectId: string) => {
     const tx = new Transaction();
 
+    const deepCoin = tx.moveCall({
+      target: "0x2::coin::zero",
+      typeArguments: [DEEP_TOKEN_TYPE],
+    });
+
     tx.moveCall({
-      target: `${PACKAGE_ID}::peach_stream::cancel_stream`,
+      target: `${PEACH_PACKAGE_ID}::peach_stream::cancel_stream`,
       arguments: [
-        tx.object(streamObjectId),                     // Shared Object consumed by value
-        tx.object(DEEPBOOK_PREDICT_POOL_ID),          
-        tx.object(ORACLE_SVI_TESTNET_OBJECT_ID),   
-        tx.object("0x6"),                              
+        tx.object(streamObjectId),
+        tx.object(PYTH_SUI_USD_PRICE_INFO_OBJECT_ID),
+        tx.object(DEEPBOOK_SUI_USDC_POOL_ID),
+        deepCoin,
+        tx.object(SUI_CLOCK_OBJECT_ID),
       ],
-      typeArguments: [OPTION_USDC_TYPE],
+      typeArguments: [USDC_TYPE],
     });
 
     try {

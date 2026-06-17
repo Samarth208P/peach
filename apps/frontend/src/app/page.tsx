@@ -8,6 +8,9 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import AnimatedHeroBackground from "@/components/AnimatedHeroBackground";
 import Header from "@/components/Header";
 import PeachTextLogo from "@/components/PeachTextLogo";
+import MicroMarginVisual from "@/components/MicroMarginVisual";
+import PTBHedgingVisual from "@/components/PTBHedgingVisual";
+import DeepBookVisual from "@/components/DeepBookVisual";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(useGSAP, ScrollTrigger);
@@ -205,8 +208,8 @@ export default function LandingPage() {
             <p className="text-[#8a8690] text-xl leading-relaxed mb-10 max-w-lg">
               99% of your payment is streamed directly to the recipient as liquid assets. 1% is algorithmically routed to the Peach module.
             </p>
-            <div className="w-full h-80 rounded-[24px] bg-gradient-to-br from-[#FD8566]/10 to-transparent relative overflow-hidden flex items-center justify-center">
-               <div className="absolute inset-0 bg-[#FD8566]/5 group-hover:bg-[#FD8566]/15 transition-colors duration-700" />
+            <div className="w-full h-80 rounded-[24px] relative overflow-hidden">
+               <MicroMarginVisual />
             </div>
           </div>
           
@@ -215,9 +218,8 @@ export default function LandingPage() {
             <p className="text-[#8a8690] text-xl leading-relaxed mb-10 max-w-lg">
               Programmable Transaction Blocks (PTBs) automatically extract the premium and mint downside put contracts natively every epoch.
             </p>
-            <div className="w-full h-80 rounded-[24px] bg-[#0d0d10] relative overflow-hidden">
-               {/* Background visual abstract */}
-               <div className="absolute inset-0 bg-white/5 opacity-50 mix-blend-screen group-hover:scale-105 transition-transform duration-1000 ease-out" />
+            <div className="w-full h-80 rounded-[24px] relative overflow-hidden">
+               <PTBHedgingVisual />
             </div>
           </div>
           
@@ -226,8 +228,8 @@ export default function LandingPage() {
             <p className="text-[#8a8690] text-xl leading-relaxed mb-10 max-w-lg">
               We leverage DeepBook V3&apos;s capital efficiency to accurately price options via a Black-Scholes invariant, ensuring minimal spread.
             </p>
-            <div className="w-full h-80 rounded-[24px] bg-gradient-to-tr from-white/5 to-transparent relative overflow-hidden">
-               <div className="absolute inset-0 bg-white/[0.02] group-hover:bg-white/[0.08] transition-colors duration-700" />
+            <div className="w-full h-80 rounded-[24px] relative overflow-hidden">
+               <DeepBookVisual />
             </div>
           </div>
         </div>
@@ -237,24 +239,24 @@ export default function LandingPage() {
       <section id="infrastructure" className="bento-grid-container max-w-7xl w-full mx-auto px-6 py-48 relative z-10">
         <h2 className="text-center text-[clamp(2rem,4vw,3.5rem)] font-display text-white mb-24 tracking-tight">Enterprise Treasury</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 auto-rows-[340px] gap-6 grid-flow-dense">
-          <div className="bento-item col-span-1 md:col-span-2 row-span-2 bg-[#0a0a0c] rounded-[40px] border border-white/[0.05] p-16 relative overflow-hidden group">
+          <div className="bento-item col-span-1 md:col-span-2 row-span-2 bg-[#0a0a0c] rounded-[40px] border border-white/[0.05] p-16 relative overflow-hidden group hover:-translate-y-2 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.5)] transition-all duration-500">
              <div className="relative z-10 h-full flex flex-col justify-end">
-               <h3 className="text-3xl text-white font-medium mb-6 font-display">Macro Upside Capture</h3>
+               <h3 className="text-3xl text-white font-medium mb-6 font-display group-hover:text-[#FD8566] transition-colors duration-500">Macro Upside Capture</h3>
                <p className="text-[#8a8690] text-lg font-light max-w-md">While your downside is protected, you retain 100% of the upside. When the market surges, you walk away with massive net gains.</p>
              </div>
              {/* Replace missing footer_bg_v2 with abstract gradient */}
              <div className="absolute inset-0 bg-gradient-to-t from-[#FD8566]/10 to-transparent mix-blend-screen opacity-20 group-hover:opacity-40 transition-opacity duration-[1.5s]" />
           </div>
           
-          <div className="bento-item col-span-1 row-span-1 bg-white/[0.02] rounded-[40px] border border-white/[0.05] p-12 flex flex-col justify-end group overflow-hidden relative">
+          <div className="bento-item col-span-1 row-span-1 bg-white/[0.02] rounded-[40px] border border-white/[0.05] p-12 flex flex-col justify-end group overflow-hidden relative hover:-translate-y-2 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.5)] transition-all duration-500">
             <div className="absolute inset-0 bg-gradient-to-t from-white/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
             <h3 className="text-xl text-white font-medium group-hover:text-[#FD8566] transition-colors duration-500 font-display">Zero Collateral</h3>
             <p className="text-[#8a8690] mt-4 font-light">Additive insurance means no liquidations.</p>
           </div>
           
-          <div className="bento-item col-span-1 row-span-1 bg-[#FD8566]/5 rounded-[40px] border border-[#FD8566]/10 p-12 flex flex-col justify-end group overflow-hidden relative">
+          <div className="bento-item col-span-1 row-span-1 bg-[#FD8566]/5 rounded-[40px] border border-[#FD8566]/10 p-12 flex flex-col justify-end group overflow-hidden relative hover:-translate-y-2 hover:border-[#FD8566]/20 hover:shadow-[0_20px_40px_-15px_rgba(253,133,102,0.15)] transition-all duration-500">
              <div className="absolute top-10 right-10 w-16 h-16 bg-[#FD8566] rounded-full blur-2xl opacity-40 group-hover:opacity-80 transition-opacity duration-700" />
-            <h3 className="text-xl text-white font-medium font-display">Instant Payouts</h3>
+            <h3 className="text-xl text-white font-medium font-display group-hover:text-[#FD8566] transition-colors duration-500">Instant Payouts</h3>
             <p className="text-[#8a8690] mt-4 font-light">Options settle instantly to your stream wallet.</p>
           </div>
         </div>

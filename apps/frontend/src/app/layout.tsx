@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { SuiProvider } from "@/components/SuiProvider";
+import { ToastProvider } from "@/components/ToastProvider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -33,7 +34,9 @@ export default function RootLayout({
     >
       <body className="min-h-dvh bg-[#060608] text-[#e8e4df] antialiased font-sans selection:bg-peach/30 selection:text-white">
         <SuiProvider>
-          {children}
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </SuiProvider>
       </body>
     </html>

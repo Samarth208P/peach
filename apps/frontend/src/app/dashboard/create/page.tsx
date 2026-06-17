@@ -1,15 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import { useRouter } from "next/navigation";
-import { Shield, ArrowRight, Zap, CheckCircle2 } from "lucide-react";
-
-const PACKAGE_ID = "0xfeded63bda28be37a34d937fe8dfe8c294596a26f4c9805128812edfd085c025";
-const DEEPBOOK_SPOT_POOL_ID = "0x7f23e4215286561ba08d4b29bb887565a44848d73b06103faee202df3b9df728";
-const DEEPBOOK_PREDICT_POOL_ID = "0x3b1cfc560205d12a23bb800bc19e342718a3d58de41bb33cf517d925e01ba062";
-const OPTION_USDC_TYPE = "0x0111111111111111111111111111111111111111111111111111111111111111::db_usdc::DB_USDC";
+import { Shield, ArrowRight, Zap, Lock, Info, Calendar, User, Coins } from "lucide-react";
+import { useToast } from "@/components/ToastProvider";
+import gsap from "gsap";
+import {
+  PEACH_PACKAGE_ID,
+  USDC_TYPE,
+  SUI_CLOCK_OBJECT_ID,
+} from "@/lib/constants";
 
 export default function CreateStreamPage() {
   const [amount, setAmount] = useState("10");
@@ -17,225 +19,312 @@ export default function CreateStreamPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [isProtected, setIsProtected] = useState(true);
+  const [strikePrice, setStrikePrice] = useState("1.00");
   const [isExecuting, setIsExecuting] = useState(false);
-  
+  const [txResult, setTxResult] = useState<string | null>(null);
+
   const currentAccount = useCurrentAccount();
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const { toast } = useToast();
   const router = useRouter();
 
-  React.useEffect(() => {
-    if (!currentAccount) {
-      router.push('/login');
-    }
+  const containerRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!currentAccount) router.push("/login");
   }, [currentAccount, router]);
+
+  // Subtle GSAP entrance animations
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.fromTo(headerRef.current,
+        { opacity: 0, y: 15 },
+        { opacity: 1, y: 0, duration: 0.8, ease: "power2.out" }
+      );
+
+      gsap.fromTo([formRef.current, summaryRef.current],
+        { opacity: 0, y: 20 },
+        { opacity: 1, y: 0, duration: 0.8, stagger: 0.1, ease: "power2.out", delay: 0.15 }
+      );
+    }, containerRef);
+
+    return () => ctx.revert();
+  }, []);
 
   const handleCreate = async () => {
     if (!currentAccount || !amount || !recipient || !startDate || !endDate) return;
+
+    const startTimeMs = new Date(startDate).getTime();
+    const endTimeMs = new Date(endDate).getTime();
+
+    if (startTimeMs < Date.now()) return toast("Start time cannot be in the past.", "error");
+    if (endTimeMs <= startTimeMs) return toast("End time must be after start time.", "error");
+
     setIsExecuting(true);
+    setTxResult(null);
 
     try {
       const txb = new Transaction();
-      
-      const amountInMist = Math.floor(parseFloat(amount) * 1_000_000_000);
-      const startTimeMs = new Date(startDate).getTime();
-      const endTimeMs = new Date(endDate).getTime();
-      const currentStrikePrice = 1_000_000; // Example fixed strike price for testnet
-      
-      let streamCoin;
-      
-      if (isProtected) {
-        const premiumAmount = Math.floor(amountInMist * 0.01);
-        const netStreamAmount = amountInMist - premiumAmount;
-        
-        const [baseCoin] = txb.splitCoins(txb.gas, [txb.pure.u64(amountInMist)]);
-        const [premiumSuiCoin, streamSui] = txb.splitCoins(baseCoin, [
-          txb.pure.u64(premiumAmount),
-          txb.pure.u64(netStreamAmount),
-        ]);
-        
-        // DeepBook V3 Spot Swap (Convert SUI to USDC)
-        const [swappedUsdcCoin] = txb.moveCall({
-          target: `deepbook::clob_v3::swap_exact_base_for_quote`,
-          arguments: [
-            txb.object(DEEPBOOK_SPOT_POOL_ID),
-            premiumSuiCoin,
-            txb.pure.u64(0),
-            txb.object("0x6"),
-          ],
-          typeArguments: [OPTION_USDC_TYPE],
-        });
+      const amountInMist = BigInt(Math.floor(parseFloat(amount) * 1_000_000_000));
 
-        // Initialize self-hedged Peach Stream Object state
-        txb.moveCall({
-          target: `${PACKAGE_ID}::peach_stream::create_stream`,
-          arguments: [
-            txb.pure.address(recipient),
-            txb.pure.u64(startTimeMs),
-            txb.pure.u64(endTimeMs),
-            txb.pure.u64(currentStrikePrice),
-            streamSui,       
-            swappedUsdcCoin,     
-            txb.object(DEEPBOOK_PREDICT_POOL_ID),
-          ],
-          typeArguments: [OPTION_USDC_TYPE],
-        });
-      } else {
-        const [stream] = txb.splitCoins(txb.gas, [BigInt(amountInMist)]);
-        
-        // Non-hedged streams wouldn't use this new method, but for compatibility if it is toggled off, 
-        // we would route to the old create_stream without USDC, or require USDC = 0 (dust). 
-        // For simplicity, we just pass empty USDC or handle appropriately, but we assume it's protected for this demo.
-        txb.moveCall({
-          target: `${PACKAGE_ID}::peach_stream::create_stream_unprotected`, // Assuming an unprotected version exists, or error out
-          arguments: [
-            txb.pure.address(recipient),
-            txb.pure.u64(startTimeMs),
-            txb.pure.u64(endTimeMs),
-            stream
-          ]
-        });
-      }
+      const strikePriceScaled = isProtected
+        ? BigInt(Math.floor(parseFloat(strikePrice) * 100_000_000))
+        : BigInt(0);
 
-      const result = await signAndExecuteTransaction({
-        transaction: txb,
+      const [streamCoin] = txb.splitCoins(txb.gas, [amountInMist]);
+
+      txb.moveCall({
+        target: `${PEACH_PACKAGE_ID}::peach_stream::create_stream`,
+        typeArguments: [USDC_TYPE],
+        arguments: [
+          txb.pure.address(recipient),
+          txb.pure.u64(BigInt(startTimeMs)),
+          txb.pure.u64(BigInt(endTimeMs)),
+          txb.pure.u64(strikePriceScaled),
+          streamCoin,
+        ],
       });
 
-      console.log("Success:", result);
-      router.push("/dashboard");
-    } catch (e) {
+      const result = await signAndExecuteTransaction({ transaction: txb });
+      setTxResult(result.digest);
+      toast("Stream deployed successfully!", "success");
+      setTimeout(() => router.push("/dashboard/streams"), 1500);
+    } catch (e: any) {
       console.error("PTB Execution Failed:", e);
+      toast(`Transaction failed: ${e?.message ?? e}`, "error");
     } finally {
       setIsExecuting(false);
     }
   };
 
+  const netAmount = parseFloat(amount || "0");
+  const strikePriceNum = parseFloat(strikePrice || "0");
+
   return (
-    <div className="p-8 max-w-4xl mx-auto font-sans">
-      <div className="mb-8">
-        <h1 className="text-3xl text-white font-display font-medium tracking-tight mb-2">Create New Stream</h1>
-        <p className="text-[#8a8690]">Configure a continuous payment stream with optional downside protection.</p>
+    <div ref={containerRef} className="relative min-h-[calc(100vh-4rem)] p-4 md:p-8 max-w-6xl mx-auto font-sans">
+      {/* Ambient Background Blobs (Fixed to prevent scroll lag) */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute top-[-5%] left-[10%] w-[50%] h-[50%] rounded-full bg-[#FF8B5E]/[0.06] blur-[120px] animate-blob" />
+        <div className="absolute top-[20%] right-[-5%] w-[40%] h-[40%] rounded-full bg-[#3898FF]/[0.05] blur-[100px] animate-blob animation-delay-2000" />
+        <div className="absolute bottom-[-10%] left-[20%] w-[45%] h-[45%] rounded-full bg-[#FF8B5E]/[0.04] blur-[100px] animate-blob animation-delay-4000" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-6">
+      {/* Header */}
+      <div ref={headerRef} className="mb-10 relative z-10 pl-2">
+        <h1 className="text-4xl text-white font-display font-semibold tracking-tight mb-3">
+          Deploy Stream
+        </h1>
+        <p className="text-[#8a8690] max-w-xl text-[15px] leading-relaxed">
+          Initialize a continuous, non-custodial payment stream. Enable Pyth protection to automatically hedge downside risk on-chain via DeepBook V3.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 relative z-10">
+        {/* Left Column: Form Config */}
+        <div ref={formRef} className="xl:col-span-8 space-y-6">
           
-          <div className="bg-[#0a0a0c]/80 backdrop-blur-xl border border-white/[0.04] rounded-3xl p-6">
-            <h2 className="text-lg font-medium text-white mb-6">Stream Configuration</h2>
+          {/* Stream Config Panel */}
+          <div className="glass rounded-3xl p-8 relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
             
-            <div className="space-y-5">
-              <div>
-                <label className="block text-sm text-[#8a8690] mb-2">Recipient Address</label>
-                <input 
-                  type="text" 
+            <h2 className="text-lg font-medium text-white mb-8 flex items-center gap-2">
+              <span className="w-1.5 h-6 bg-[#FD8566] rounded-full inline-block" />
+              Stream Details
+            </h2>
+
+            <div className="space-y-6">
+              {/* Recipient */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-[#8a8690] flex items-center gap-2 ml-1">
+                  <User className="w-4 h-4" /> Recipient Address
+                </label>
+                <input
+                  type="text"
                   value={recipient}
                   onChange={(e) => setRecipient(e.target.value)}
                   placeholder="0x..."
-                  className="w-full bg-[#060608] border border-white/[0.08] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FD8566]/50 transition-colors"
+                  className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl px-5 py-4 text-white placeholder:text-[#8a8690]/40 focus:outline-none focus:border-[#FD8566]/50 focus:ring-1 focus:ring-[#FD8566]/50 transition-all duration-300 font-mono text-sm shadow-inner"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm text-[#8a8690] mb-2">Total Amount (SUI)</label>
-                <div className="relative">
-                  <input 
-                    type="number" 
+              {/* Amount */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-[#8a8690] flex items-center gap-2 ml-1">
+                  <Coins className="w-4 h-4" /> Total Amount
+                </label>
+                <div className="relative group/input">
+                  <input
+                    type="number"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    className="w-full bg-[#060608] border border-white/[0.08] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FD8566]/50 transition-colors text-2xl font-display"
+                    min="0.001"
+                    step="0.001"
+                    className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl pl-5 pr-16 py-4 text-white focus:outline-none focus:border-[#FD8566]/50 focus:ring-1 focus:ring-[#FD8566]/50 transition-all duration-300 text-xl font-display shadow-inner"
                   />
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-[#3898FF] flex items-center justify-center">
-                      <span className="text-[10px] font-bold text-white">SUI</span>
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#3898FF] to-[#60A5FA] flex items-center justify-center shadow-[0_0_15px_rgba(56,152,255,0.3)]">
+                      <span className="text-[10px] font-bold text-white tracking-wider">SUI</span>
                     </div>
                   </div>
                 </div>
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm text-[#8a8690] mb-2">Start Time</label>
-                  <input 
-                    type="datetime-local" 
+
+              {/* Dates */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-[#8a8690] flex items-center gap-2 ml-1">
+                    <Calendar className="w-4 h-4" /> Start Time
+                  </label>
+                  <input
+                    type="datetime-local"
                     value={startDate}
+                    min={new Date().toISOString().slice(0, 16)}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full bg-[#060608] border border-white/[0.08] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FD8566]/50 transition-colors [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
+                    className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl px-5 py-3.5 text-white focus:outline-none focus:border-[#FD8566]/50 focus:ring-1 focus:ring-[#FD8566]/50 transition-all duration-300 [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert shadow-inner"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm text-[#8a8690] mb-2">End Time</label>
-                  <input 
-                    type="datetime-local" 
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-[#8a8690] flex items-center gap-2 ml-1">
+                    <Calendar className="w-4 h-4" /> End Time
+                  </label>
+                  <input
+                    type="datetime-local"
                     value={endDate}
+                    min={startDate || new Date().toISOString().slice(0, 16)}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full bg-[#060608] border border-white/[0.08] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FD8566]/50 transition-colors [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
+                    className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl px-5 py-3.5 text-white focus:outline-none focus:border-[#FD8566]/50 focus:ring-1 focus:ring-[#FD8566]/50 transition-all duration-300 [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert shadow-inner"
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-[#0a0a0c]/80 backdrop-blur-xl border border-[#FD8566]/20 rounded-3xl p-6 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-[#FD8566]/5 rounded-full blur-[60px] pointer-events-none" />
-            
-            <div className="flex items-start justify-between relative z-10">
+          {/* Protection Config Panel */}
+          <div className={`glass rounded-3xl p-8 relative overflow-hidden transition-all duration-500 border ${isProtected ? "border-[#FD8566]/30 shadow-[0_0_40px_rgba(253,133,102,0.08)]" : "border-white/[0.06]"}`}>
+            {/* Glowing corner if protected */}
+            <div className={`absolute top-0 right-0 w-64 h-64 bg-[#FD8566]/10 rounded-full blur-[60px] pointer-events-none transition-opacity duration-700 ${isProtected ? "opacity-100" : "opacity-0"}`} />
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between relative z-10 gap-6">
               <div>
                 <div className="flex items-center gap-3 mb-2">
-                  <Shield className="w-5 h-5 text-[#FD8566]" />
-                  <h2 className="text-lg font-medium text-white">Price Safety Switch</h2>
+                  <div className={`p-2 rounded-xl transition-colors duration-500 ${isProtected ? "bg-[#FD8566]/20 text-[#FD8566]" : "bg-white/5 text-[#8a8690]"}`}>
+                    <Shield className="w-5 h-5" />
+                  </div>
+                  <h2 className={`text-lg font-medium transition-colors duration-500 ${isProtected ? "text-white glow-text" : "text-[#8a8690]"}`}>Pyth Safety Switch</h2>
                 </div>
-                <p className="text-[#8a8690] text-sm max-w-sm">
-                  Automatically route a 1% micro-premium into DeepBook Predict to hedge against SUI volatility during the stream duration.
+                <p className="text-[#8a8690] text-sm max-w-md leading-relaxed ml-11">
+                  Auto-swap your unvested SUI to USDC via DeepBook V3 if the live Pyth oracle detects a price drop below your floor.
                 </p>
               </div>
               
-              <button 
+              <button
                 onClick={() => setIsProtected(!isProtected)}
-                className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors duration-300 ${isProtected ? 'bg-[#FD8566]' : 'bg-white/10'}`}
+                className={`relative inline-flex h-8 w-16 items-center rounded-full transition-all duration-500 flex-shrink-0 ${isProtected ? "bg-[#FD8566] shadow-[0_0_15px_rgba(253,133,102,0.4)]" : "bg-white/10"}`}
               >
-                <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform duration-300 ${isProtected ? 'translate-x-8' : 'translate-x-1'}`} />
+                <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform duration-500 shadow-md ${isProtected ? "translate-x-9" : "translate-x-1"}`} />
               </button>
             </div>
-          </div>
 
-        </div>
-
-        <div className="space-y-6">
-          <div className="bg-[#0a0a0c]/80 backdrop-blur-xl border border-white/[0.04] rounded-3xl p-6">
-            <h2 className="text-lg font-medium text-white mb-6">Summary</h2>
-            
-            <div className="space-y-4 mb-8">
-              <div className="flex justify-between items-center pb-4 border-b border-white/[0.04]">
-                <span className="text-[#8a8690]">Recipient gets</span>
-                <span className="text-white font-medium">{isProtected ? (parseFloat(amount || "0") * 0.99).toFixed(2) : amount} SUI</span>
-              </div>
-              <div className="flex justify-between items-center pb-4 border-b border-white/[0.04]">
-                <span className="text-[#8a8690]">Premium (1%)</span>
-                <span className="text-[#FD8566] font-medium">{isProtected ? (parseFloat(amount || "0") * 0.01).toFixed(2) : "0.00"} SUI</span>
-              </div>
-              <div className="flex justify-between items-center pt-2">
-                <span className="text-[#8a8690]">Total Deposit</span>
-                <span className="text-white font-display text-xl">{amount || "0"} SUI</span>
+            <div className={`transition-all duration-500 overflow-hidden relative z-10 ${isProtected ? "max-h-40 mt-8 opacity-100" : "max-h-0 mt-0 opacity-0"}`}>
+              <div className="pt-6 border-t border-white/[0.06] ml-11">
+                <label className="text-sm font-medium text-white/80 mb-3 flex items-center gap-2">
+                  <Lock className="w-3.5 h-3.5 text-[#FD8566]" /> Strike Price Floor (USD per SUI)
+                </label>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <div className="relative w-full sm:w-64">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8a8690] font-medium">$</span>
+                    <input
+                      type="number"
+                      value={strikePrice}
+                      onChange={(e) => setStrikePrice(e.target.value)}
+                      step="0.01"
+                      min="0.01"
+                      className="w-full bg-[#060608]/80 border border-[#FD8566]/30 hover:border-[#FD8566]/60 rounded-xl pl-8 pr-4 py-3 text-white focus:outline-none focus:border-[#FD8566] focus:ring-1 focus:ring-[#FD8566]/50 transition-all duration-300 font-mono shadow-inner"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
+          </div>
+        </div>
 
-            <button 
-              onClick={handleCreate}
-              disabled={isExecuting || !currentAccount || !amount || !recipient || !startDate || !endDate}
-              className="w-full bg-[#FD8566] hover:bg-[#ff957a] disabled:opacity-50 text-white font-medium rounded-xl py-4 flex items-center justify-center gap-2 transition-colors shadow-[0_0_20px_rgba(253,133,102,0.3)]"
-            >
-              {isExecuting ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <>
-                  <Zap className="w-5 h-5" />
-                  <span>Create Stream</span>
-                </>
+        {/* Right Column: Receipt & Deploy */}
+        <div ref={summaryRef} className="xl:col-span-4">
+          <div className="glass rounded-3xl p-1 relative overflow-hidden sticky top-8">
+            <div className="bg-[#0a0a0c]/40 rounded-[22px] p-6 lg:p-8 h-full border border-white/[0.02]">
+              
+              <div className="flex items-center gap-3 mb-8">
+                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+                  <Zap className="w-4 h-4 text-[#FD8566]" />
+                </div>
+                <h3 className="text-white font-medium text-lg">Transaction Summary</h3>
+              </div>
+
+              <div className="space-y-4 mb-8">
+                <div className="flex justify-between items-end pb-4 border-b border-white/[0.06] border-dashed">
+                  <span className="text-[#8a8690] text-sm">Escrow Amount</span>
+                  <div className="text-right">
+                    <span className="text-white text-xl font-display font-medium">{netAmount.toFixed(3)}</span>
+                    <span className="text-[#8a8690] text-sm ml-1">SUI</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center pb-4 border-b border-white/[0.06] border-dashed">
+                  <span className="text-[#8a8690] text-sm">Protection</span>
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${isProtected ? "bg-[#FD8566]/10 text-[#FD8566] border border-[#FD8566]/20" : "bg-white/5 text-[#8a8690] border border-white/10"}`}>
+                    {isProtected ? "ACTIVE" : "OFF"}
+                  </span>
+                </div>
+                {isProtected && (
+                  <div className="flex justify-between items-center pb-4 border-b border-white/[0.06] border-dashed animate-in fade-in duration-300">
+                    <span className="text-[#8a8690] text-sm">Strike Floor</span>
+                    <span className="text-white font-mono text-sm">${strikePriceNum.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center pb-2">
+                  <span className="text-[#8a8690] text-sm">Oracle</span>
+                  <span className="text-[#8a8690] text-sm flex items-center gap-1.5">
+                    {isProtected && <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />}
+                    {isProtected ? "Pyth Network" : "None"}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={handleCreate}
+                disabled={isExecuting || !currentAccount || !amount || !recipient || !startDate || !endDate}
+                className="group relative w-full bg-[#FD8566] hover:bg-white disabled:bg-white/10 disabled:text-white/40 disabled:cursor-not-allowed text-white hover:text-black font-semibold rounded-2xl py-4.5 flex items-center justify-center gap-2 transition-all duration-500 overflow-hidden"
+              >
+                {/* Button Hover Sweep Effect */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-700 ease-out" />
+                
+                {isExecuting ? (
+                  <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <span>Sign & Deploy</span>
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
+                  </>
+                )}
+              </button>
+
+              {txResult && (
+                <div className="mt-5 p-4 bg-green-500/10 border border-green-500/20 rounded-2xl animate-in slide-in-from-bottom-2 fade-in duration-300">
+                  <p className="text-green-400 text-xs font-mono text-center flex flex-col gap-1">
+                    <span className="font-semibold text-sm">✓ Transaction Confirmed</span>
+                    <span className="opacity-80 truncate">{txResult}</span>
+                  </p>
+                </div>
               )}
-            </button>
-            
-            {!currentAccount && (
-              <p className="text-center text-xs text-[#FD8566] mt-4">Wallet disconnected. Please connect to continue.</p>
-            )}
+
+              {!currentAccount && (
+                <p className="text-center text-xs text-[#FD8566] mt-5 flex items-center justify-center gap-1.5">
+                  <Info className="w-3.5 h-3.5" /> Please connect your Sui wallet
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>
