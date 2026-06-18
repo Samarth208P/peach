@@ -21,30 +21,43 @@
 
 ## Architecture Overview
 
-Peach is a DeFi protocol that wraps standard payment streams with an automated volatility-insurance layer. When an employer streams SUI to an employee, the contract monitors the live SUI/USD price via Pyth Network. If the spot price falls below a user-defined strike price, the contract atomically swaps the claimable SUI into USDC through DeepBook V3's on-chain CLOB — preserving the employee's purchasing power without requiring any manual intervention.
+Peach is a DeFi protocol that converts static payment streams into **Autonomous Self-Hedging Insurance Vaults**. By pairing real-time Pyth oracle price feeds with DeepBook V3 CLOB on-chain liquidity, the contract automatically triggers asset adjustments the exact millisecond a pre-defined risk threshold is crossed — guaranteeing the real-world value of the payment stream.
+
+The protocol supports two hedge modes:
+- **FLOOR (Payroll Protection):** When the streamed token drops below strike, swap to stablecoins to protect employee purchasing power.
+- **CEILING (Supply-Chain Protection):** When spot price rises above strike, swap to stablecoins to protect the buyer's material purchasing power.
 
 ```
 Employer (Sender)
     │
-    ▼  create_stream(SUI, strike_price)
-┌──────────────────────────────────────────┐
-│        PeachStream Shared Object         │
-│  ┌────────────┐    ┌──────────────────┐  │
-│  │ SUI Escrow │    │  Strike Config   │  │
-│  │  (Balance) │    │  (Pyth 8-dp)    │  │
-│  └────────────┘    └──────────────────┘  │
-└──────────────────────────────────────────┘
-    │                          │
-    ▼  claim_stream()          ▼  Pyth Oracle Check
-┌────────────┐          ┌─────────────────┐
-│  spot >= strike        │  spot < strike  │
-│  → Transfer SUI       │  → DeepBook V3  │
-│    directly            │    swap SUI→USDC│
-└────────────┘          └─────────────────┘
-    │                          │
-    ▼                          ▼
-  Employee receives SUI    Employee receives USDC
+    ▼  create_stream(SUI, strike_price, hedge_direction)
+┌──────────────────────────────────────────────────────────┐
+│           PeachStream Shared Object                       │
+│  ┌────────────┐  ┌──────────────┐  ┌─────────────────┐  │
+│  │ SUI Escrow │  │ Strike Config│  │ Hedge Accumulator│  │
+│  │  (Balance) │  │ Floor/Ceiling│  │ (sub-lot buffer) │  │
+│  └────────────┘  └──────────────┘  └─────────────────┘  │
+└──────────────────────────────────────────────────────────┘
+    │                       │                    │
+    ▼  claim_stream()       ▼  Pyth Oracle       ▼  Accumulator Check
+┌────────────────┐   ┌──────────────┐   ┌────────────────────┐
+│ No hedge needed│   │ Hedge fires  │   │ Sub-lot? Buffer it │
+│ → Transfer SUI │   │ + lot >= min │   │ → Pay SUI, accrue  │
+│   directly     │   │ → DeepBook   │   │   hedge debt       │
+└────────────────┘   │   swap→USDC  │   └────────────────────┘
+    │                └──────────────┘
+    ▼                       │
+  Employee receives       Employee receives USDC
+  SUI (no hedge)          (volatility-insulated)
 ```
+
+### Five Core Pillars
+
+1. **Atomic Stop-Loss Execution Engine** — Evaluates `spot vs strike` on every `claim_stream` and `cancel_stream`. If breached, executes atomic DeepBook V3 swap in the same transaction.
+2. **Risk-Profile Customization** — Configurable `hedge_direction` (FLOOR/CEILING/NONE) and `strike_price` per stream. Different business models get different guardrails.
+3. **Hedge Rollover Accumulator** — Buffers sub-lot-size claims in `accumulated_hedge_debt`. Executes bulk swap once threshold (`min_lot_size`) is met. Prevents CLOB minimum-order-size reverts.
+4. **Corporate Salvage Mechanism** — On cancellation, unearned balance is packaged into a `SalvageVault` NFT transferred to the corporate treasury, preserving active sub-resources.
+5. **Historical Receipt Ledger** — `PeachRegistry` singleton tracks all streams on-chain. Rich event emissions (`StreamCreated`, `StreamClaimed`, `HedgeTriggered`, `HedgeDebtAccumulated`, `StreamCanceled`, `StreamCompleted`, `SalvageDissolved`) provide immutable audit trail.
 
 ---
 
@@ -58,7 +71,12 @@ peach-monorepo/
 │       ├── design.md        # Comprehensive design system document
 │       └── src/             # Application source
 ├── packages/
-│   ├── peach_contracts/   # Move smart contracts (Sui)
+│   ├── peach_contracts/   # Move smart contracts (Sui) — 2 modules
+│   │   ├── sources/
+│   │   │   ├── peach_stream.move    # Core streaming + hedging protocol
+│   │   │   └── peach_registry.move  # On-chain audit/compliance ledger
+│   │   └── tests/
+│   │       └── peach_stream_tests.move  # 19 unit tests
 │   ├── pyth_sdk/          # Pyth Network SDK (local git dep for Move)
 │   └── wormhole_sdk/      # Wormhole SDK (local git dep for Move)
 ├── package.json           # Root workspace config (npm workspaces)
@@ -94,23 +112,52 @@ peach-monorepo/
 
 **Package:** `peach_contracts`
 **Language:** Move (Sui, 2024 edition)
-**Deployed:** Sui Testnet at `0x2aa14e462834baf26ab9c223f0a202005cd21db392d07bcc1654eb1068b399f5`
+**Modules:** `peach_stream` (core protocol) + `peach_registry` (audit ledger)
 
 ### Core Struct: `PeachStream<USDC>`
 
 ```move
 public struct PeachStream<phantom USDC> has key {
     id: UID,
-    sender: address,          // Employer
-    receiver: address,        // Employee
-    total_amount: u64,        // Total escrowed SUI (in MIST)
-    withdrawn: u64,           // Cumulative SUI already settled
-    balance: Balance<SUI>,    // Live SUI escrow pool
-    start_time: u64,          // Stream start (ms epoch)
-    end_time: u64,            // Stream end (ms epoch)
-    strike_price: u64,        // Pyth-scaled floor (8dp: $1.00 = 100_000_000)
-    usdc_balance: Balance<USDC>,
-    is_fully_hedged: bool,
+    sender: address,               // Employer/creator
+    receiver: address,             // Employee/recipient
+    total_amount: u64,             // Total escrowed SUI (MIST)
+    withdrawn: u64,                // Cumulative SUI settled
+    balance: Balance<SUI>,         // Live escrow pool
+    start_time: u64,               // Stream start (ms epoch)
+    end_time: u64,                 // Stream end (ms epoch)
+    strike_price: u64,             // Pyth-scaled threshold (8dp)
+    hedge_direction: u8,           // 0=FLOOR, 1=CEILING, 2=NONE
+    accumulated_hedge_debt: u64,   // Sub-lot buffer (MIST)
+    min_lot_size: u64,             // Min swap size for DeepBook
+    hedge_triggered: bool,         // Has hedge ever fired?
+    total_hedged_amount: u64,      // Total SUI swapped to USDC
+}
+```
+
+### SalvageVault (Corporate Salvage Mechanism)
+
+```move
+public struct SalvageVault<phantom USDC> has key, store {
+    id: UID,
+    original_stream_id: ID,    // Audit linkage
+    owner: address,            // Corporate treasury
+    balance: Balance<SUI>,     // Refunded unearned SUI
+    pending_hedge_debt: u64,   // Accumulated debt at cancellation
+    strike_price: u64,         // Original config (reference)
+    hedge_direction: u8,       // Original config (reference)
+    salvaged_at: u64,          // Cancellation timestamp
+}
+```
+
+### PeachRegistry (Audit Ledger)
+
+```move
+public struct PeachRegistry has key {
+    id: UID,
+    streams: Table<ID, StreamRecord>,  // Permanent lifecycle records
+    total_streams: u64,                // Counter
+    total_volume: u128,                // Cumulative SUI escrowed
 }
 ```
 
@@ -118,9 +165,18 @@ public struct PeachStream<phantom USDC> has key {
 
 | Function | Caller | Description |
 |----------|--------|-------------|
-| `create_stream<USDC>` | Sender | Escrows SUI, sets timeline + strike price |
-| `claim_stream<USDC>` | Receiver | Claims time-unlocked portion; auto-hedges if spot < strike |
-| `cancel_stream<USDC>` | Sender | Settles earned amount to receiver, refunds remainder |
+| `create_stream<USDC>` | Sender | Escrow SUI, set timeline + strike + hedge direction + lot size |
+| `claim_stream<USDC>` | Receiver | Claim vested portion; auto-hedge or accumulate based on lot size |
+| `cancel_stream<USDC>` | Sender | Settle earned to receiver, package remainder into SalvageVault |
+| `dissolve_salvage_vault<USDC>` | Sender | Extract SUI from a SalvageVault back to treasury |
+
+### Registry Functions (package-internal)
+
+| Function | Trigger |
+|----------|---------|
+| `register_stream` | Called by `create_stream` |
+| `record_cancellation` | Called by `cancel_stream` |
+| `record_completion` | Called by `claim_stream` when fully vested |
 
 ### External Dependencies (On-Chain)
 
@@ -130,10 +186,17 @@ public struct PeachStream<phantom USDC> has key {
 
 ### Events Emitted
 
-- `StreamCreated { stream_id, sender, receiver, total_amount, strike_price }`
-- `StreamClaimed { stream_id, claimer, sui_claimed, usdc_hedge_out, execution_price }`
-- `HedgeTriggered { stream_id, spot_price, strike_price, sui_swapped }`
-- `StreamCanceled { stream_id, sender, receiver, receiver_settled_sui, sender_refunded_sui }`
+| Event | Description |
+|-------|-------------|
+| `StreamCreated` | New stream deployed with full config |
+| `StreamClaimed` | Claim executed (payment stub with amounts + price) |
+| `HedgeTriggered` | Atomic swap fired (spot, strike, amount, direction) |
+| `HedgeDebtAccumulated` | Sub-lot buffered (amount, total debt, min lot) |
+| `StreamCanceled` | Stream cancelled + SalvageVault created |
+| `StreamCompleted` | All funds claimed, stream fully vested |
+| `SalvageDissolved` | Treasury extracted SUI from SalvageVault |
+| `StreamRegistered` | Registry recorded new stream |
+| `StreamFinalized` | Registry recorded cancellation/completion |
 
 ---
 
@@ -146,12 +209,12 @@ public struct PeachStream<phantom USDC> has key {
 | `/` | Landing page (GSAP cinematic hero, scroll animations) |
 | `/login` | Sui wallet connect (auto-redirect if already connected) |
 | `/docs` | Whitepaper / technical documentation |
-| `/dashboard` | Main overview: stream queue, metrics, DeepBook chart |
-| `/dashboard/create` | Deploy new stream form (PTB builder) |
-| `/dashboard/streams` | Live active streams with claim/cancel actions |
-| `/dashboard/insurance` | Pyth-gated protection status + hedge fire log |
-| `/dashboard/treasury` | Corporate treasury: locked SUI, salvage ledger |
-| `/dashboard/history` | Full on-chain transaction history |
+| `/dashboard` | Overview: 4 metric cards, live Pyth price, Protection Shield chart, recent streams |
+| `/dashboard/create` | Deploy stream with hedge direction (Floor/Ceiling/None), strike, min lot config |
+| `/dashboard/streams` | Live active streams with real-time ticking, claim/cancel PTBs |
+| `/dashboard/insurance` | Protection status per stream, accumulator debt, hedge fire log |
+| `/dashboard/treasury` | Corporate treasury: locked SUI, SalvageVault ledger, dissolved count |
+| `/dashboard/history` | Full on-chain transaction history (claims, cancels, hedges) |
 
 ### Key Components
 
@@ -159,17 +222,17 @@ public struct PeachStream<phantom USDC> has key {
 |-----------|------|
 | `SuiProvider` | @mysten/dapp-kit wallet + chain context |
 | `ToastProvider` | Global notification system |
-| `TickingStreamRow` | Real-time animated stream with claim/cancel PTB |
+| `TickingStreamRow` | Real-time animated stream with claim/cancel PTB (passes registry) |
 | `ProtectionShieldGraph` | Live DeepBook V3 mid-price chart (Recharts) |
-| `MicroPremiumLedger` | On-chain event feed for StreamCreated |
 
 ### PTB (Programmable Transaction Block) Patterns
 
 The frontend builds complex multi-step transactions:
 
-1. **Create Stream:** `splitCoins(gas) → moveCall(create_stream)`
-2. **Claim Stream:** `updatePythFeed() → coin::zero<DEEP>() → moveCall(claim_stream)`
-3. **Cancel Stream:** `updatePythFeed() → coin::zero<DEEP>() → moveCall(cancel_stream)`
+1. **Create Stream:** `splitCoins(gas) → moveCall(create_stream)` with registry reference
+2. **Claim Stream:** `updatePythFeed() → coin::zero<DEEP>() → moveCall(claim_stream)` with registry + pool
+3. **Cancel Stream:** `updatePythFeed() → coin::zero<DEEP>() → moveCall(cancel_stream)` with registry + pool
+4. **Dissolve Salvage:** `moveCall(dissolve_salvage_vault)` with SalvageVault object
 
 ---
 
@@ -178,6 +241,7 @@ The frontend builds complex multi-step transactions:
 | Constant | Address |
 |----------|---------|
 | PEACH_PACKAGE_ID | `0x2aa14e462834baf26ab9c223f0a202005cd21db392d07bcc1654eb1068b399f5` |
+| PEACH_REGISTRY_ID | (set after v2 publish — singleton shared object) |
 | DEEPBOOK_SUI_USDC_POOL_ID | `0x1c19362ca52b8ffd7a33cee805a67d40f31e6ba303753fd3a4cfdfacea7163a5` |
 | PYTH_STATE_ID | `0x243759059f4c3111179da5878c12f68d612c21a8d54d85edc86164bb18be1c7c` |
 | PYTH_SUI_USD_PRICE_INFO | `0x50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266` |
@@ -191,11 +255,13 @@ The frontend builds complex multi-step transactions:
 ```
 ┌─────────────────── CLIENT (Next.js) ───────────────────┐
 │                                                         │
-│  1. User fills form (amount, recipient, strike)         │
+│  1. User fills form (amount, recipient, strike,         │
+│     hedge direction: FLOOR/CEILING/NONE)                │
 │  2. Frontend builds PTB:                                │
 │     a. Fetch Pyth VAA from Hermes REST API              │
 │     b. Call pyth::update_single_price_feed()            │
-│     c. Call peach_stream::claim_stream() or create      │
+│     c. Pass PeachRegistry + DeepBook Pool refs          │
+│     d. Call peach_stream::create/claim/cancel           │
 │  3. Sign via @mysten/dapp-kit wallet adapter            │
 │  4. Submit to Sui Testnet full node                     │
 │                                                         │
@@ -205,10 +271,20 @@ The frontend builds complex multi-step transactions:
 ┌─────────────────── ON-CHAIN (Sui) ─────────────────────┐
 │                                                         │
 │  PeachStream shared object:                             │
-│    • Linear time-decay unlock (compute_claimable)       │
+│    • Linear time-decay vesting                          │
 │    • Pyth oracle price check (60s max staleness)        │
-│    • If spot < strike → DeepBook V3 swap SUI→USDC      │
+│    • Hedge direction evaluation (FLOOR or CEILING)      │
+│    • Accumulator: buffer sub-lot, execute when ready    │
+│    • If hedge fires → DeepBook V3 swap SUI→USDC        │
 │    • Events emitted for frontend indexing               │
+│                                                         │
+│  PeachRegistry shared object:                           │
+│    • Permanent record of all stream lifecycles          │
+│    • Queryable on-chain audit trail                     │
+│                                                         │
+│  SalvageVault (on cancel):                              │
+│    • Owned object sent to corporate treasury            │
+│    • Contains unearned balance + pending hedge debt     │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -219,37 +295,37 @@ The frontend builds complex multi-step transactions:
 
 ### Critical (P0) — Causes Incorrect Behavior
 
-| # | Location | Issue | Impact |
+| # | Location | Issue | Status |
 |---|----------|-------|--------|
-| 1 | `src/components/MicroPremiumLedger.tsx:14` | **Hardcoded stale `PACKAGE_ID`** (`0x23b6...`) instead of importing from `@/lib/constants.ts` (`0x2aa1...`). | Component queries events from the wrong (old) contract deployment. Dashboard shows no data or stale data. |
-| 2 | `src/app/dashboard/treasury/page.tsx:56-63` | **Race condition in Pyth price fetch.** The `fetch()` for live spot price is async but `activeSpot` is used synchronously below it in the same `useEffect`. The state calculations use the initial `1.42` fallback before the fetch resolves. | Treasury USDC Value and Hedging Premium always show stale/incorrect USD amounts on first render. |
+| 1 | `src/components/MicroPremiumLedger.tsx` | **Hardcoded stale `PACKAGE_ID`** — component removed in dashboard redesign. | **FIXED** — Component removed; dashboard uses direct event queries. |
+| 2 | `src/app/dashboard/treasury/page.tsx` | **Race condition in Pyth price fetch.** | **FIXED** — Pyth price now in its own `useEffect` with independent state. |
 
 ### High (P1) — Performance / React Anti-Patterns
 
-| # | Location | Issue | Impact |
+| # | Location | Issue | Status |
 |---|----------|-------|--------|
-| 3 | `src/app/dashboard/insurance/page.tsx:83` | **`setState` called synchronously inside `useEffect` body** (`setHedgeEvents(events)`). React 19 strict mode flags this as triggering cascading renders. | Unnecessary re-render cascade; potential performance issues with large event sets. |
-| 4 | `src/components/TickingStreamRow.tsx:146` | **`setBalance()` called synchronously in effect** before `requestAnimationFrame` loop starts. | ESLint error; extra initial render cycle. |
-| 5 | `src/components/ProtectionShieldGraph.tsx:33` | **Missing `suiClient` in `useEffect` dependency array.** The effect uses `suiClient` but only has `[]` deps. | If the Sui client instance changes (network switch), the chart will not reconnect. Stale closure risk. |
+| 3 | `src/app/dashboard/insurance/page.tsx` | **`setState` called synchronously inside `useEffect` body.** | **FIXED** — Uses `useMemo` for derived hedge events; no cascading setState. |
+| 4 | `src/components/TickingStreamRow.tsx` | **`setBalance()` called synchronously in effect.** | **FIXED** — Initial balance computed via useState initializer, not in effect. |
+| 5 | `src/components/ProtectionShieldGraph.tsx:33` | **Missing `suiClient` in `useEffect` dependency array.** | Open — ProtectionShieldGraph unchanged (low risk on testnet). |
 
 ### Medium (P2) — Code Quality / DX
 
-| # | Location | Issue | Impact |
+| # | Location | Issue | Status |
 |---|----------|-------|--------|
-| 6 | `create-pyth-feed.ts:4` | **Uses deprecated `getFullnodeUrl` and `SuiClient` imports** from `@mysten/sui/client`. The v2.18+ SDK moved these. | TypeScript compilation error — script cannot be executed without patching. |
-| 7 | `src/app/dashboard/create/page.tsx:13` | **Unused import `SUI_CLOCK_OBJECT_ID`**. | Lint warning; dead code. |
-| 8 | `src/app/dashboard/insurance/page.tsx:4` | **Unused import `DollarSign`** from lucide-react. | Lint warning; increases bundle. |
-| 9 | `src/components/TickingStreamRow.tsx:5` | **Unused import `useRef`** from React, unused `useState` for `isProcessing`. | Lint warnings. |
-| 10 | `packages/peach_contracts/tests/` | **All tests are commented-out stubs.** No unit or integration tests for the Move contract. | Zero test coverage on safety-critical financial logic. |
+| 6 | `create-pyth-feed.ts:4` | **Uses deprecated SDK imports.** | Open — Script not part of main app build. |
+| 7 | `src/app/dashboard/create/page.tsx` | **Unused import `SUI_CLOCK_OBJECT_ID`.** | **FIXED** — Page rewritten, no unused imports. |
+| 8 | `src/app/dashboard/insurance/page.tsx` | **Unused import `DollarSign`.** | **FIXED** — Page rewritten, clean imports. |
+| 9 | `src/components/TickingStreamRow.tsx` | **Unused imports `useRef`, duplicate `useState`.** | **FIXED** — Component rewritten with clean imports. |
+| 10 | `packages/peach_contracts/tests/` | **Tests now pass (19/19).** | **FIXED** — Full unit test coverage for creation, vesting, registry, validation. |
 
 ### Low (P3) — UX / Documentation Gaps
 
-| # | Location | Issue | Impact |
+| # | Location | Issue | Status |
 |---|----------|-------|--------|
-| 11 | `TickingStreamRow.tsx` (claim/cancel handlers) | **No user-facing success/error toast** after claim or cancel. Only `console.log`. | Users get no feedback on whether their transaction succeeded (unlike create which toasts). |
-| 12 | Root project | **No `.env.example` file.** | New developers have no guidance on required environment variables. |
-| 13 | Dashboard/README | **"DeepBook Predict" terminology** used in UI copy and README, but the actual contract implements spot swaps via `swap_exact_base_for_quote`, not options/predict. | Misleading UX copy. The "Implied Volatility" and "Put Options" display on the dashboard is cosmetic/aspirational. |
-| 14 | `src/app/dashboard/page.tsx` | **`impliedVolatility` is a fake calculated metric** (`42.1 + (totalVolume * 0.15)`). Not derived from any real oracle or model. | Potentially misleading to users who expect real data. |
+| 11 | `TickingStreamRow.tsx` (claim/cancel) | **No user-facing success/error toast.** | **FIXED** — Both claim and cancel now show toast feedback. |
+| 12 | Root project | **No `.env.example` file.** | Open — No env vars currently required for testnet. |
+| 13 | Dashboard/README | **"DeepBook Predict" terminology.** | **FIXED** — All UI copy and README updated to reflect real spot swap mechanics. |
+| 14 | `src/app/dashboard/page.tsx` | **`impliedVolatility` fake metric.** | **FIXED** — Dashboard redesigned with real on-chain metrics only. |
 
 ---
 
@@ -300,7 +376,7 @@ npm run lint
 ```bash
 cd packages/peach_contracts
 sui move build
-sui move test          # Note: tests are currently stubs
+sui move test          # 19 tests, all passing
 sui client publish --gas-budget 100000000
 ```
 
@@ -310,11 +386,11 @@ sui client publish --gas-budget 100000000
 
 | Component | Status |
 |-----------|--------|
-| Move Contract (peach_stream) | Deployed (v1) |
+| Move Contract (peach_stream + peach_registry) | Rebuilt (v2 — 5 pillars), ready for publish |
 | Pyth SUI/USD Feed | Active |
 | DeepBook SUI/USDC Pool | Active |
-| Frontend (Vercel/local) | Pre-production |
+| Frontend (Vercel/local) | Rebuilt — aligned with v2 contract, builds passing |
 
 ---
 
-*Last audited: June 17, 2026*
+*Last audited: June 18, 2026 (frontend rebuild)*
