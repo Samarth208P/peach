@@ -172,6 +172,7 @@ module peach_contracts::peach_stream {
         stream_id: ID,
         claimer: address,
         sui_claimed: u64,
+        fee_deducted: u64,
         usdc_hedge_out: u64,
         execution_price: u64,
         hedge_debt_accumulated: u64,
@@ -342,9 +343,24 @@ module peach_contracts::peach_stream {
         let spot_price = read_spot_price(price_info, clock);
         let needs_hedge = should_hedge(stream.strike_price, stream.hedge_direction, spot_price);
 
+        // --- PROTOCOL FEE DEDUCTION ---
+        let fee_amount = calculate_fee(
+            claimable,
+            stream.total_amount,
+            spot_price,
+            stream.strike_price,
+            stream.hedge_direction
+        );
+        let net_claimable = claimable - fee_amount;
+
+        if (fee_amount > 0) {
+            let fee_coin = coin::take(&mut stream.balance, fee_amount, ctx);
+            peach_registry::deposit_fee(registry, fee_coin.into_balance());
+        };
+
         let usdc_hedge_out = if (needs_hedge) {
             // --- PILLAR 3: Hedge Rollover Accumulator ---
-            let total_to_hedge = claimable + stream.accumulated_hedge_debt;
+            let total_to_hedge = net_claimable + stream.accumulated_hedge_debt;
 
             if (total_to_hedge >= stream.min_lot_size) {
                 // Execute the atomic swap for full amount (current + accumulated)
@@ -381,13 +397,13 @@ module peach_contracts::peach_stream {
 
                 event::emit(HedgeDebtAccumulated {
                     stream_id,
-                    amount_buffered: claimable,
+                    amount_buffered: net_claimable,
                     total_debt: total_to_hedge,
                     min_lot_size: stream.min_lot_size,
                 });
 
                 refund_deep(deep_fee, sender);
-                let payout = coin::take(&mut stream.balance, claimable, ctx);
+                let payout = coin::take(&mut stream.balance, net_claimable, ctx);
                 transfer::public_transfer(payout, receiver);
                 0
             }
@@ -398,7 +414,7 @@ module peach_contracts::peach_stream {
                 stream.accumulated_hedge_debt = 0;
             };
             refund_deep(deep_fee, sender);
-            let payout = coin::take(&mut stream.balance, claimable, ctx);
+            let payout = coin::take(&mut stream.balance, net_claimable, ctx);
             transfer::public_transfer(payout, receiver);
             0
         };
@@ -406,7 +422,8 @@ module peach_contracts::peach_stream {
         event::emit(StreamClaimed {
             stream_id,
             claimer: receiver,
-            sui_claimed: claimable,
+            sui_claimed: net_claimable,
+            fee_deducted: fee_amount,
             usdc_hedge_out,
             execution_price: spot_price,
             hedge_debt_accumulated: stream.accumulated_hedge_debt,
@@ -799,6 +816,50 @@ module peach_contracts::peach_stream {
         stream.withdrawn
     }
 
+    // ============================================================================
+    // Internal - Fees
+    // ============================================================================
+
+    /// Calculates dynamic protocol fee based on volume discount and risk premium.
+    fun calculate_fee(
+        claimable: u64,
+        total_amount: u64,
+        spot_price: u64,
+        strike_price: u64,
+        hedge_direction: u8,
+    ): u64 {
+        let one_sui = 1_000_000_000u64;
+        let mut base_bps = 50; 
+        
+        if (total_amount >= 10000 * one_sui) {
+            base_bps = 10; 
+        } else if (total_amount >= 5000 * one_sui) {
+            base_bps = 20; 
+        } else if (total_amount >= 1000 * one_sui) {
+            base_bps = 30; 
+        };
+
+        let mut risk_bps = 0;
+
+        if (strike_price > 0 && hedge_direction != 2) {
+            if (hedge_direction == 0) { 
+                let danger_threshold = (strike_price * 105) / 100;
+                if (spot_price < danger_threshold) {
+                    risk_bps = 150; 
+                };
+            } else if (hedge_direction == 1) { 
+                let danger_threshold = (strike_price * 95) / 100;
+                if (spot_price > danger_threshold) {
+                    risk_bps = 150; 
+                };
+            };
+        };
+
+        let total_bps = base_bps + risk_bps;
+        
+        (claimable * total_bps) / 10_000
+    }
+
     #[test_only]
     public fun stream_strike_price<USDC>(stream: &PeachStream<USDC>): u64 {
         stream.strike_price
@@ -827,5 +888,16 @@ module peach_contracts::peach_stream {
     #[test_only]
     public fun stream_end_time<USDC>(stream: &PeachStream<USDC>): u64 {
         stream.end_time
+    }
+
+    #[test_only]
+    public fun calculate_fee_for_testing(
+        claimable: u64,
+        total_amount: u64,
+        spot_price: u64,
+        strike_price: u64,
+        hedge_direction: u8,
+    ): u64 {
+        calculate_fee(claimable, total_amount, spot_price, strike_price, hedge_direction)
     }
 }

@@ -161,7 +161,7 @@ export default function LandingDocs() {
               {mermaidSvg ? (
                 <div dangerouslySetInnerHTML={{ __html: mermaidSvg }} />
               ) : (
-                <span className="text-[#8a8690] animate-pulse">Loading Chart...</span>
+                <span className="text-[#8a8690]">Loading Chart...</span>
               )}
             </div>
           </div>

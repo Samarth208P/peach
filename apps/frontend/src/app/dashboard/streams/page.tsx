@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import TickingStreamRow from "@/components/TickingStreamRow";
 import { Activity, Clock } from "lucide-react";
 import { useSuiClientQuery, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
-import { PEACH_PACKAGE_ID } from "@/lib/constants";
+import { PEACH_PACKAGE_ID, PYTH_HERMES_BASE_URL, PYTH_SUI_USD_FEED_ID } from "@/lib/constants";
 
 interface StreamConfig {
   id: string;
@@ -26,6 +26,27 @@ export default function StreamsPage() {
   const suiClient = useSuiClient();
   const [activeStreams, setActiveStreams] = useState<StreamConfig[]>([]);
   const [isFetchingObjects, setIsFetchingObjects] = useState(false);
+  const [pythSpotPrice, setPythSpotPrice] = useState<number | null>(null);
+
+  useEffect(() => {
+    const fetchPrice = async () => {
+      try {
+        const res = await fetch(
+          `${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${PYTH_SUI_USD_FEED_ID}`
+        );
+        const json = await res.json();
+        const parsed = json?.parsed?.[0]?.price;
+        if (parsed) {
+          setPythSpotPrice(parseFloat(parsed.price) * Math.pow(10, parsed.expo));
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    fetchPrice();
+    const interval = setInterval(fetchPrice, 10_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const { data: createdEvents, isLoading: isEventsLoading } = useSuiClientQuery(
     "queryEvents",
@@ -120,7 +141,7 @@ export default function StreamsPage() {
             </h2>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+            <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
             <span className="text-[10px] text-[#8a8690] uppercase tracking-widest">
               {activeStreams.length} active
             </span>
@@ -143,7 +164,7 @@ export default function StreamsPage() {
         ) : (
           <div className="space-y-3">
             {activeStreams.map((stream) => (
-              <TickingStreamRow key={stream.id} config={stream} />
+              <TickingStreamRow key={stream.id} config={stream} pythSpotPrice={pythSpotPrice || 0} />
             ))}
           </div>
         )}

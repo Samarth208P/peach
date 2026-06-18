@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { ArrowUpRight, ArrowDownLeft, ShieldCheck, Shield, RefreshCw } from "lucide-react";
 import { Transaction } from "@mysten/sui/transactions";
 import { useSignAndExecuteTransaction, useSuiClient } from "@mysten/dapp-kit";
@@ -8,6 +8,8 @@ import { Buffer } from "buffer";
 import { SuiPythClient } from "@pythnetwork/pyth-sui-js";
 import { HermesClient } from "@pythnetwork/hermes-client";
 import { useToast } from "@/components/ToastProvider";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 
 import {
   PEACH_PACKAGE_ID,
@@ -38,7 +40,7 @@ interface StreamConfig {
   hedgeTriggered?: boolean;
 }
 
-export default function TickingStreamRow({ config }: { config: StreamConfig }) {
+export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config: StreamConfig; pythSpotPrice?: number }) {
   const [balance, setBalance] = useState(() => {
     const velocity = config.targetValue / config.durationSeconds;
     const now = Date.now();
@@ -46,6 +48,14 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
     return elapsed * velocity;
   });
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const progressBarRef = useRef<HTMLDivElement>(null);
+  const glowRef = useRef<HTMLDivElement>(null);
+  const flowBgRef = useRef<HTMLDivElement>(null);
+
+  const [hasStarted, setHasStarted] = useState(() => Date.now() >= config.startTimeMs);
+
+  gsap.registerPlugin(useGSAP);
 
   const suiClient = useSuiClient();
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
@@ -151,10 +161,16 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
 
     const tick = () => {
       const currentNow = Date.now();
+
+      if (currentNow >= config.startTimeMs && !hasStarted) {
+        setHasStarted(true);
+      }
+
       if (currentNow < config.startTimeMs) {
         animationFrameId = requestAnimationFrame(tick);
         return;
       }
+      
       const elapsed = Math.max(0, Math.min(currentNow - config.startTimeMs, config.endTimeMs - config.startTimeMs)) / 1000;
       const currentBalance = elapsed * velocity;
       setBalance(currentBalance);
@@ -168,9 +184,79 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
 
     animationFrameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [config.targetValue, config.durationSeconds, config.startTimeMs, config.endTimeMs]);
+  }, [config.targetValue, config.durationSeconds, config.startTimeMs, config.endTimeMs, hasStarted]);
 
-  const percentage = Math.min((balance / config.targetValue) * 100, 100);
+  // Dynamic fee calculation mirroring the smart contract
+  const [estimatedFee, setEstimatedFee] = useState(0);
+  const [isDangerZone, setIsDangerZone] = useState(false);
+
+  useEffect(() => {
+    let baseBps = 50;
+    if (config.targetValue >= 10000) baseBps = 10;
+    else if (config.targetValue >= 5000) baseBps = 20;
+    else if (config.targetValue >= 1000) baseBps = 30;
+
+    let riskBps = 0;
+    const strike = config.strikePrice || 0;
+    const hedgeDirection = config.hedgeDirection ?? 2;
+    let danger = false;
+
+    if (strike > 0 && hedgeDirection !== 2 && pythSpotPrice > 0) {
+      if (hedgeDirection === 0) { // FLOOR
+        if (pythSpotPrice < strike * 1.05) { riskBps = 150; danger = true; }
+      } else if (hedgeDirection === 1) { // CEILING
+        if (pythSpotPrice > strike * 0.95) { riskBps = 150; danger = true; }
+      }
+    }
+
+    const totalBps = baseBps + riskBps;
+    setEstimatedFee((balance * totalBps) / 10000);
+    setIsDangerZone(danger);
+  }, [balance, config.targetValue, config.strikePrice, config.hedgeDirection, pythSpotPrice]);
+
+  useGSAP(() => {
+    if (!progressBarRef.current || !flowBgRef.current) return;
+
+    const now = Date.now();
+    const durationTotalMs = config.endTimeMs - config.startTimeMs;
+    const durationTotalSecs = durationTotalMs / 1000;
+    
+    // Calculate initial percentage
+    const elapsedMs = Math.max(0, Math.min(now - config.startTimeMs, durationTotalMs));
+    const initialPercentage = (elapsedMs / durationTotalMs) * 100;
+    
+    // Calculate remaining duration
+    const remainingMs = Math.max(0, config.endTimeMs - now);
+    const remainingSecs = remainingMs / 1000;
+    
+    const delayMs = Math.max(0, config.startTimeMs - now);
+    const delaySecs = delayMs / 1000;
+
+    // 1. Animate width smoothly
+    if (remainingSecs > 0) {
+      gsap.set(progressBarRef.current, { width: `${initialPercentage}%` });
+      gsap.to(progressBarRef.current, {
+        width: "100%",
+        duration: remainingSecs,
+        delay: delaySecs,
+        ease: "none",
+      });
+    } else {
+      gsap.set(progressBarRef.current, { width: "100%" });
+    }
+
+    // 2. Flowing gradient background effect
+    gsap.to(flowBgRef.current, {
+      backgroundPosition: "200% 0",
+      duration: 1.5,
+      repeat: -1,
+      ease: "none",
+    });
+
+    // 3. Pulsing glow head (REMOVED)
+
+  }, [config.startTimeMs, config.endTimeMs]);
+
   const isProtected = (config.hedgeDirection ?? 2) !== 2;
   const dirLabel = config.hedgeDirection === 0 ? "Floor" : config.hedgeDirection === 1 ? "Ceiling" : "";
 
@@ -214,33 +300,58 @@ export default function TickingStreamRow({ config }: { config: StreamConfig }) {
       </div>
 
       {/* Progress bar */}
-      <div className="w-full h-1 bg-[#141418] rounded-full overflow-hidden">
+      <div className="w-full h-1.5 bg-[#141418] rounded-full overflow-visible relative mt-1">
+        {/* The animated progress bar */}
         <div
-          className="h-full bg-[#FF8B5E] rounded-full transition-all duration-75 ease-linear"
-          style={{ width: `${percentage}%` }}
-        />
+          ref={progressBarRef}
+          className="absolute top-0 left-0 h-full rounded-full flex items-center justify-end"
+          // Removed static style={{ width: "0%" }} so React does not override GSAP during re-renders
+        >
+          {/* Flowing background layer */}
+          <div 
+            ref={flowBgRef}
+            className="absolute inset-0 rounded-full"
+            style={{ 
+               background: 'linear-gradient(90deg, rgba(255,139,94,0.4) 0%, #FF8B5E 50%, rgba(255,139,94,0.4) 100%)',
+               backgroundSize: '200% 100%'
+            }}
+          />
+        </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex justify-end gap-2">
-        {(config.type === "inbound" || config.type === "self") && (
-          <button
-            onClick={() => executeClaimTransaction(config.id)}
-            disabled={isProcessing}
-            className="px-4 py-1.5 bg-[#FF8B5E] text-black text-xs font-semibold rounded-lg hover:bg-[#FFB088] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isProcessing ? "Processing..." : "Claim"}
-          </button>
-        )}
-        {(config.type === "outbound" || config.type === "self") && (
-          <button
-            onClick={() => executeCancelTransaction(config.id)}
-            disabled={isProcessing}
-            className="px-4 py-1.5 bg-[#0d0d10] border border-white/5 text-[#e8e4df] text-xs font-medium rounded-lg hover:bg-[#141418] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isProcessing ? "Processing..." : "Cancel"}
-          </button>
-        )}
+      {/* Actions & Fee Info */}
+      <div className="flex justify-between items-center mt-2">
+        <div className="flex items-center gap-2">
+          {estimatedFee > 0 && (
+            <div className="flex flex-col">
+              <span className="text-[10px] text-[#8a8690] uppercase tracking-wider">Protocol Fee</span>
+              <span className={`text-[11px] font-mono font-medium ${isDangerZone ? "text-[#FF8B5E]" : "text-[#e8e4df]"}`}>
+                -{estimatedFee.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })} SUI
+                {isDangerZone && " (Risk Premium)"}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2">
+          {(config.type === "inbound" || config.type === "self") && (
+            <button
+              onClick={() => executeClaimTransaction(config.id)}
+              disabled={isProcessing}
+              className="px-4 py-1.5 bg-[#FF8B5E] text-black text-xs font-semibold rounded-lg hover:bg-[#FFB088] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isProcessing ? "Processing..." : "Claim"}
+            </button>
+          )}
+          {(config.type === "outbound" || config.type === "self") && !hasStarted && (
+            <button
+              onClick={() => executeCancelTransaction(config.id)}
+              disabled={isProcessing}
+              className="px-4 py-1.5 bg-[#0d0d10] border border-white/5 text-[#e8e4df] text-xs font-medium rounded-lg hover:bg-[#141418] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isProcessing ? "Processing..." : "Cancel"}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

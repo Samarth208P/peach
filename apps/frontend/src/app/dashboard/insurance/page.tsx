@@ -31,6 +31,7 @@ export default function InsurancePage() {
   const [activeProtections, setActiveProtections] = useState<StreamProtection[]>([]);
   const [protectedVolume, setProtectedVolume] = useState(0);
   const [pythSpotPrice, setPythSpotPrice] = useState<number | null>(null);
+  const [isPythLoading, setIsPythLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
 
   // Live Pyth SUI/USD price
@@ -47,6 +48,8 @@ export default function InsurancePage() {
         }
       } catch {
         setPythSpotPrice(null);
+      } finally {
+        setIsPythLoading(false);
       }
     };
     fetchPrice();
@@ -134,7 +137,7 @@ export default function InsurancePage() {
       .catch(() => setIsFetching(false));
   }, [createdEvents, currentAccount, suiClient]);
 
-  const isLoading = isEventsLoading || isHedgeLoading || isFetching;
+  const isLoading = isEventsLoading || isHedgeLoading || isFetching || isPythLoading;
   const spotDisplay = pythSpotPrice !== null ? `$${pythSpotPrice.toFixed(4)}` : "Loading...";
   const totalDebtBuffered = activeProtections.reduce((a, p) => a + p.accumulatedDebt, 0);
 
@@ -174,7 +177,7 @@ export default function InsurancePage() {
             {spotDisplay}
           </div>
           <div className="flex items-center gap-1 mt-1">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+            <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
             <span className="text-[9px] text-[#8a8690] uppercase tracking-wider">Live</span>
           </div>
         </div>

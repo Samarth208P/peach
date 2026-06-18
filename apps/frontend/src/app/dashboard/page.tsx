@@ -227,7 +227,7 @@ export default function DashboardPage() {
       {/* Pyth Price Banner */}
       <div className="flex items-center gap-4 px-5 py-3 bg-[#0d0d10]/60 border border-white/5 rounded-2xl">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <div className="w-2 h-2 rounded-full bg-green-400" />
           <span className="text-xs text-[#8a8690] uppercase tracking-wider font-medium">Pyth SUI/USD</span>
         </div>
         <span className="text-lg font-mono text-[#e8e4df] font-medium">

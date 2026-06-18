@@ -3,24 +3,24 @@ name = "peach_contracts"
 edition = "2024"
 
 [dependencies]
-# Sui framework — override to resolve conflicts with transitive dep version pins
+# Sui framework - override to resolve conflicts with transitive dep version pins
 # Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet", override = true }
 
-# MoveStdlib — override to unify conflicting versions from DeepBook and Pyth
+# MoveStdlib - override to unify conflicting versions from DeepBook and Pyth
 # MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "testnet", override = true }
 
-# DeepBook V3 — official live package from MystenLabs (name must match package name "deepbook")
+# DeepBook V3 - official live package from MystenLabs (name must match package name "deepbook")
 deepbook = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/deepbook", rev = "testnet" }
 
-# Wormhole — local copy (Move.toml symlink resolved)
+# Wormhole - local copy (Move.toml symlink resolved)
 # Published: 0xf47329f4344f3bf0f8e436e2f7b485466cff300f12a166563995d3888c296a94
 Wormhole = { local = "../wormhole_sdk/sui/wormhole" }
 
-# Pyth Network — local copy (Move.toml symlink resolved)
+# Pyth Network - local copy (Move.toml symlink resolved)
 # Published: 0xabf837e98c26087cba0883c0a7a28326b1fa3c5e1e2c5abdb486f9e8f594c837
 Pyth = { local = "../pyth_sdk/target_chains/sui/contracts" }
 
 [addresses]
-peach_contracts = "0x3c778030466dd379d262375e293912899166f0205f6adeef702108a0002b5172"
+peach_contracts = "0xf60ef755304df5ff790efd90fb9c3e507eced03d69b73f210d0c5920c115ae1d"
 pyth            = "0xabf837e98c26087cba0883c0a7a28326b1fa3c5e1e2c5abdb486f9e8f594c837"
 wormhole        = "0xf47329f4344f3bf0f8e436e2f7b485466cff300f12a166563995d3888c296a94"
