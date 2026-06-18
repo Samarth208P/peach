@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { AreaChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { DeepBookClient } from '@mysten/deepbook-v3';
 import { useSuiClient } from '@mysten/dapp-kit';
+import { ZERO_ADDRESS } from "@/lib/constants";
 
 interface DataPoint {
   time: number;
@@ -26,7 +27,7 @@ export default function ProtectionShieldGraph() {
     const dbClient = new DeepBookClient({ 
       client: suiClient, 
       network: 'testnet',
-      address: '0x0000000000000000000000000000000000000000000000000000000000000000'
+      address: ZERO_ADDRESS
     });
     
     const fetchPrice = async () => {

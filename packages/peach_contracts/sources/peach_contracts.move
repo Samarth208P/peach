@@ -1,8 +1,3 @@
-/*
-/// Module: peach_contracts
-module peach_contracts::peach_contracts;
-*/
-
-// For Move coding conventions, see
-// https://docs.sui.io/concepts/sui-move-concepts/conventions
-
+// Module: peach_contracts
+// This package provides volatility-insured payment streaming on Sui.
+// See peach_stream.move for the core protocol and peach_registry.move for audit.

@@ -1,262 +1,376 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import PeachTextLogo from "@/components/PeachTextLogo";
-import TickingStreamRow from "@/components/TickingStreamRow";
-import ProtectionShieldGraph from "@/components/ProtectionShieldGraph";
-import MicroPremiumLedger from "@/components/MicroPremiumLedger";
-
-import { Plus, LayoutDashboard, Wallet, Activity } from "lucide-react";
 import { useCurrentAccount, useSuiClientQuery, useSuiClient } from "@mysten/dapp-kit";
+import {
+  Plus,
+  Activity,
+  Shield,
+  TrendingDown,
+  Zap,
+  ArrowRight,
+  Clock,
+  Wallet,
+} from "lucide-react";
 
-import { PEACH_PACKAGE_ID } from "@/lib/constants";
+import ProtectionShieldGraph from "@/components/ProtectionShieldGraph";
+import { PEACH_PACKAGE_ID, PYTH_HERMES_BASE_URL, PYTH_SUI_USD_FEED_ID } from "@/lib/constants";
+
+interface StreamSummary {
+  id: string;
+  sender: string;
+  receiver: string;
+  totalAmount: number;
+  startTime: number;
+  endTime: number;
+  strikePrice: number;
+  hedgeDirection: number;
+  hedgeTriggered: boolean;
+  accumulatedDebt: number;
+  totalHedged: number;
+  remaining: number;
+}
 
 export default function DashboardPage() {
   const currentAccount = useCurrentAccount();
   const router = useRouter();
-  const client = useSuiClient();
+  const suiClient = useSuiClient();
 
-  const [activeStreams, setActiveStreams] = React.useState<any[]>([]);
-  const [isPending, setIsPending] = React.useState(true);
-  const [filterType, setFilterType] = React.useState<"all" | "outbound" | "inbound">("all");
+  const [streams, setStreams] = useState<StreamSummary[]>([]);
+  const [isHydrating, setIsHydrating] = useState(true);
+  const [pythPrice, setPythPrice] = useState<number | null>(null);
 
-  React.useEffect(() => {
-    if (!currentAccount) {
-      router.push('/login');
-    }
+  useEffect(() => {
+    if (!currentAccount) router.push("/login");
   }, [currentAccount, router]);
-  
-  const { data: eventsData } = useSuiClientQuery(
-    'queryEvents',
+
+  // Live Pyth SUI/USD price
+  useEffect(() => {
+    const fetchPrice = async () => {
+      try {
+        const res = await fetch(
+          `${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${PYTH_SUI_USD_FEED_ID}`
+        );
+        const json = await res.json();
+        const parsed = json?.parsed?.[0]?.price;
+        if (parsed) {
+          setPythPrice(parseFloat(parsed.price) * Math.pow(10, parsed.expo));
+        }
+      } catch {
+        /* keep last */
+      }
+    };
+    fetchPrice();
+    const interval = setInterval(fetchPrice, 10_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Query StreamCreated events
+  const { data: createdEvents } = useSuiClientQuery(
+    "queryEvents",
     {
-      query: {
-        MoveEventType: `${PEACH_PACKAGE_ID}::peach_stream::StreamCreated`,
-      },
-      order: 'descending',
+      query: { MoveEventType: `${PEACH_PACKAGE_ID}::peach_stream::StreamCreated` },
+      order: "descending",
     },
-    {
-      enabled: !!currentAccount,
-      refetchInterval: 5000
-    }
+    { enabled: !!currentAccount, refetchInterval: 8000 }
   );
 
-  // Query HedgeTriggered events for real hedge volume
-  const { data: hedgeEventsData } = useSuiClientQuery(
-    'queryEvents',
+  // Query HedgeTriggered events
+  const { data: hedgeEvents } = useSuiClientQuery(
+    "queryEvents",
     {
-      query: {
-        MoveEventType: `${PEACH_PACKAGE_ID}::peach_stream::HedgeTriggered`,
-      },
-      order: 'descending',
+      query: { MoveEventType: `${PEACH_PACKAGE_ID}::peach_stream::HedgeTriggered` },
+      order: "descending",
     },
-    {
-      enabled: !!currentAccount,
-      refetchInterval: 10000
-    }
+    { enabled: !!currentAccount, refetchInterval: 10000 }
   );
 
-  const totalHedgedSui = React.useMemo(() => {
-    if (!hedgeEventsData?.data) return 0;
-    return hedgeEventsData.data.reduce((acc, event) => {
-      const d = event.parsedJson as any;
+  // Query HedgeDebtAccumulated events
+  const { data: debtEvents } = useSuiClientQuery(
+    "queryEvents",
+    {
+      query: { MoveEventType: `${PEACH_PACKAGE_ID}::peach_stream::HedgeDebtAccumulated` },
+      order: "descending",
+    },
+    { enabled: !!currentAccount, refetchInterval: 10000 }
+  );
+
+  // Hydrate stream objects from on-chain
+  useEffect(() => {
+    if (!createdEvents?.data || !currentAccount) {
+      setIsHydrating(false);
+      return;
+    }
+
+    const userEvents = createdEvents.data.filter((e) => {
+      const p = e.parsedJson as any;
+      return p?.sender === currentAccount.address || p?.receiver === currentAccount.address;
+    });
+
+    const streamIds = userEvents.map((e) => (e.parsedJson as any).stream_id);
+    if (streamIds.length === 0) {
+      setStreams([]);
+      setIsHydrating(false);
+      return;
+    }
+
+    setIsHydrating(true);
+    suiClient
+      .multiGetObjects({ ids: streamIds, options: { showContent: true } })
+      .then((res) => {
+        const hydrated: StreamSummary[] = [];
+        res.forEach((obj) => {
+          if (obj.data?.content?.dataType === "moveObject") {
+            const f = obj.data.content.fields as any;
+            hydrated.push({
+              id: f.id.id,
+              sender: f.sender,
+              receiver: f.receiver,
+              totalAmount: Number(f.total_amount) / 1e9,
+              startTime: Number(f.start_time),
+              endTime: Number(f.end_time),
+              strikePrice: Number(f.strike_price) / 1e8,
+              hedgeDirection: Number(f.hedge_direction),
+              hedgeTriggered: f.hedge_triggered === true,
+              accumulatedDebt: Number(f.accumulated_hedge_debt) / 1e9,
+              totalHedged: Number(f.total_hedged_amount) / 1e9,
+              remaining: Number(f.balance) / 1e9,
+            });
+          }
+        });
+        setStreams(hydrated);
+      })
+      .catch(console.error)
+      .finally(() => setIsHydrating(false));
+  }, [createdEvents, currentAccount, suiClient]);
+
+  // Computed metrics
+  const totalVolume = streams.reduce((a, s) => a + s.totalAmount, 0);
+  const activeCount = streams.length;
+  const protectedCount = streams.filter((s) => s.hedgeDirection !== 2).length;
+  const hedgeFiredCount = hedgeEvents?.data?.length ?? 0;
+  const totalHedgedSui = useMemo(() => {
+    if (!hedgeEvents?.data) return 0;
+    return hedgeEvents.data.reduce((acc, e) => {
+      const d = e.parsedJson as any;
       return acc + Number(d.sui_swapped || 0) / 1e9;
     }, 0);
-  }, [hedgeEventsData]);
+  }, [hedgeEvents]);
+  const totalAccumulatedDebt = streams.reduce((a, s) => a + s.accumulatedDebt, 0);
+  const outboundCount = streams.filter((s) => s.sender === currentAccount?.address).length;
+  const inboundCount = streams.filter((s) => s.receiver === currentAccount?.address).length;
 
-  React.useEffect(() => {
-    async function hydrateSharedObjects() {
-      if (!eventsData?.data || !currentAccount?.address) {
-        setIsPending(false);
-        return;
-      }
-
-      try {
-        const userStreamIds = eventsData.data
-          .map((event) => event.parsedJson as { stream_id: string; sender: string; receiver: string })
-          .filter(
-            (payload) =>
-              payload &&
-              (payload.sender === currentAccount.address ||
-              payload.receiver === currentAccount.address)
-          )
-          .map((payload) => payload.stream_id);
-
-        if (userStreamIds.length === 0) {
-          setActiveStreams([]);
-          setIsPending(false);
-          return;
-        }
-
-        const fieldsData = await client.multiGetObjects({
-          ids: userStreamIds,
-          options: { showContent: true },
-        });
-
-        const validObjects = fieldsData
-          .filter((obj) => obj.data && !obj.error)
-          .map((obj: any) => {
-            const fields = obj.data?.content?.fields;
-            const start = Number(fields?.start_time) || 0;
-            const end = Number(fields?.end_time) || 0;
-            const durationSeconds = end > start ? (end - start) / 1000 : 30 * 24 * 60 * 60;
-            const elapsedSeconds = start > 0 ? Math.max(0, (Date.now() - start) / 1000) : 0;
-
-            let type = "self";
-            if (fields?.sender === currentAccount?.address && fields?.receiver !== currentAccount?.address) {
-              type = "outbound";
-            } else if (fields?.receiver === currentAccount?.address && fields?.sender !== currentAccount?.address) {
-              type = "inbound";
-            }
-
-            return {
-              id: obj.data?.objectId,
-              type: type,
-              targetValue: fields?.total_amount ? Number(fields.total_amount) / 1_000_000_000 : 0,
-              durationSeconds: durationSeconds,
-              elapsedSeconds: elapsedSeconds, 
-              startTimeMs: start,
-              endTimeMs: end,
-              sender: fields?.sender || "",
-              receiver: fields?.receiver || ""
-            };
-          });
-
-        setActiveStreams(validObjects);
-      } catch (err) {
-        console.error("Hydration pipeline failed:", err);
-      } finally {
-        setIsPending(false);
-      }
-    }
-
-    hydrateSharedObjects();
-  }, [eventsData, currentAccount?.address, client]);
-
-  const totalVolume = activeStreams.reduce((acc, curr) => acc + curr.targetValue, 0);
-  const outCount = activeStreams.filter(s => s.sender === currentAccount?.address).length;
-  const inCount = activeStreams.filter(s => s.receiver === currentAccount?.address).length;
-
-  const filteredStreams = activeStreams.filter(stream => {
-    if (filterType === "all") return true;
-    if (filterType === "outbound") return stream.type === "outbound" || stream.type === "self";
-    if (filterType === "inbound") return stream.type === "inbound" || stream.type === "self";
-    return true;
-  });
+  const hedgeDirectionLabel = (d: number) => {
+    if (d === 0) return "Floor";
+    if (d === 1) return "Ceiling";
+    return "None";
+  };
 
   return (
-    <div className="flex flex-col font-sans w-full relative z-10">
-      <main className="w-full max-w-[1600px] mx-auto px-8 py-10 flex flex-col gap-8">
-        {/* Top Actions */}
-        <div className="w-full flex justify-end items-center mb-2 gap-4">
-          <div className="px-4 py-2 bg-white/[0.03] border border-white/[0.08] rounded-full text-sm font-mono text-white/80 backdrop-blur-md">
-            {currentAccount ? `${currentAccount.address.slice(0, 6)}...${currentAccount.address.slice(-4)}` : "Not Connected"}
+    <div className="flex flex-col gap-8 font-sans w-full">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl text-[#e8e4df] font-display font-medium tracking-tight mb-1">
+            Dashboard
+          </h1>
+          <p className="text-[#8a8690] text-sm">
+            Self-hedging payment streams — live protocol overview
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="px-3 py-1.5 bg-white/[0.03] border border-white/[0.08] rounded-full text-xs font-mono text-[#8a8690]">
+            {currentAccount
+              ? `${currentAccount.address.slice(0, 6)}...${currentAccount.address.slice(-4)}`
+              : "Not Connected"}
           </div>
-          <Link href="/dashboard/create" className="flex items-center gap-2 bg-[#FD8566] text-black px-5 py-2 rounded-full text-sm font-medium hover:scale-105 transition-transform duration-300">
-            <Plus size={16} /> New Stream
+          <Link
+            href="/dashboard/create"
+            className="flex items-center gap-2 bg-[#FF8B5E] text-black px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#FFB088] transition-colors duration-300"
+          >
+            <Plus size={14} strokeWidth={2.5} /> New Stream
           </Link>
         </div>
-        
-        {/* Top Layer: Global Capital Strip */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[
-            { label: "Total Streamed Volume", value: `${totalVolume.toFixed(2)} SUI`, spark: "Active Testnet" },
-            { label: "Active Vectors", value: `${outCount} Out / ${inCount} In`, spark: "Stable" },
-            { label: "Net Insured Capital", value: `${(totalVolume * 0.99).toFixed(2)} SUI`, spark: "100% Protected" },
-            { label: "Micro-Premiums (1%)", value: `${(totalVolume * 0.01).toFixed(2)} SUI`, spark: "Routed to DeepBook" }
-          ].map((metric, i) => (
-            <div key={i} className="bg-white/[0.02] border border-white/[0.05] rounded-3xl p-6 flex flex-col gap-3 relative overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-br from-white/[0.01] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-              <span className="text-[#8a8690] text-sm font-medium relative z-10">{metric.label}</span>
-              <span className="text-3xl text-white font-display font-medium relative z-10">{metric.value}</span>
-              <span className="text-xs text-[#FD8566] font-mono mt-1 relative z-10">{metric.spark}</span>
-            </div>
-          ))}
+      </div>
+
+      {/* Metrics Strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard
+          icon={<Wallet size={16} strokeWidth={1.5} />}
+          label="Total Volume"
+          value={`${totalVolume.toFixed(2)} SUI`}
+          sub={pythPrice ? `$${(totalVolume * pythPrice).toFixed(2)} USD` : undefined}
+        />
+        <MetricCard
+          icon={<Activity size={16} strokeWidth={1.5} />}
+          label="Active Streams"
+          value={`${activeCount}`}
+          sub={`${outboundCount} out / ${inboundCount} in`}
+        />
+        <MetricCard
+          icon={<Shield size={16} strokeWidth={1.5} />}
+          label="Protected"
+          value={`${protectedCount}`}
+          sub={totalAccumulatedDebt > 0 ? `${totalAccumulatedDebt.toFixed(4)} SUI buffered` : "All clear"}
+          accent={protectedCount > 0}
+        />
+        <MetricCard
+          icon={<Zap size={16} strokeWidth={1.5} />}
+          label="Hedges Fired"
+          value={`${hedgeFiredCount}`}
+          sub={totalHedgedSui > 0 ? `${totalHedgedSui.toFixed(2)} SUI swapped` : "No hedges yet"}
+        />
+      </div>
+
+      {/* Pyth Price Banner */}
+      <div className="flex items-center gap-4 px-5 py-3 bg-[#0d0d10]/60 border border-white/5 rounded-2xl">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-xs text-[#8a8690] uppercase tracking-wider font-medium">Pyth SUI/USD</span>
         </div>
+        <span className="text-lg font-mono text-[#e8e4df] font-medium">
+          {pythPrice !== null ? `$${pythPrice.toFixed(4)}` : "Loading..."}
+        </span>
+        <span className="text-xs text-[#8a8690] ml-auto">Refreshes every 10s via Hermes API</span>
+      </div>
 
-        {/* Full Width Protection Shield Chart */}
-        <div className="mt-6 w-full">
-          <ProtectionShieldGraph />
-        </div>
+      {/* Protection Shield Chart */}
+      <ProtectionShieldGraph />
 
-        {/* Middle Layer: Split Grid Configuration */}
-        <div className="flex flex-col lg:flex-row gap-6 mt-4">
-          
-          {/* Left Column: 60% Width */}
-          <div className="flex flex-col w-full lg:w-3/5 gap-6">
-            
-            <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/[0.05] rounded-[32px] p-8 flex flex-col flex-1 min-h-[400px]">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl text-white font-display font-medium tracking-tight">Active Streams Queue</h2>
-                <div className="flex bg-white/[0.03] p-1 rounded-lg">
-                  <button 
-                    onClick={() => setFilterType("all")}
-                    className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${filterType === "all" ? "bg-white/[0.08] text-white" : "text-[#8a8690] hover:text-white"}`}>All</button>
-                  <button 
-                    onClick={() => setFilterType("outbound")}
-                    className={`px-4 py-1.5 rounded-md text-xs transition-colors ${filterType === "outbound" ? "bg-white/[0.08] text-white" : "text-[#8a8690] hover:text-white"}`}>Outbound</button>
-                  <button 
-                    onClick={() => setFilterType("inbound")}
-                    className={`px-4 py-1.5 rounded-md text-xs transition-colors ${filterType === "inbound" ? "bg-white/[0.08] text-white" : "text-[#8a8690] hover:text-white"}`}>Inbound</button>
-                </div>
-              </div>
-              
-              <div className="flex flex-col gap-4">
-                {isPending ? (
-                  <div className="text-center text-[#8a8690] py-10">Fetching live streams...</div>
-                ) : activeStreams.length === 0 ? (
-                  <div className="text-center text-[#8a8690] py-10">No active streams found. Create one!</div>
-                ) : filteredStreams.length === 0 ? (
-                  <div className="text-center text-[#8a8690] py-10">No streams match the selected filter.</div>
-                ) : (
-                  filteredStreams.map((stream: any) => (
-                    <TickingStreamRow key={stream.id} config={stream} />
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/[0.05] rounded-[32px] p-8 min-h-[300px]">
-              <MicroPremiumLedger />
-            </div>
-            
+      {/* Recent Streams */}
+      <div className="bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Activity size={16} className="text-[#8a8690]" />
+            <h2 className="text-sm font-medium text-[#e8e4df] tracking-wide">
+              Recent Streams
+            </h2>
           </div>
+          <Link
+            href="/dashboard/streams"
+            className="flex items-center gap-1 text-xs text-[#8a8690] hover:text-[#FF8B5E] transition-colors"
+          >
+            View all <ArrowRight size={12} />
+          </Link>
+        </div>
 
-          {/* Right Column: 40% Width */}
-          <div className="flex flex-col w-full lg:w-2/5 gap-6">
+        {isHydrating ? (
+          <div className="flex flex-col items-center justify-center py-12 text-[#8a8690]">
+            <div className="w-5 h-5 border-[1.5px] border-white/10 border-t-[#8a8690] rounded-full animate-spin mb-3" />
+            <p className="text-xs uppercase tracking-wider">Loading streams</p>
+          </div>
+        ) : streams.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 border border-dashed border-white/5 rounded-2xl bg-[#060608]/50">
+            <Clock size={20} className="text-[#8a8690] mb-3 opacity-40" />
+            <p className="text-[#e8e4df] text-sm font-medium mb-1">No streams yet</p>
+            <p className="text-[#8a8690] text-xs mb-4">
+              Deploy your first self-hedging payment stream.
+            </p>
+            <Link
+              href="/dashboard/create"
+              className="flex items-center gap-2 bg-[#FF8B5E] text-black px-4 py-2 rounded-xl text-xs font-medium hover:bg-[#FFB088] transition-colors"
+            >
+              <Plus size={12} /> Create Stream
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {streams.slice(0, 5).map((stream) => {
+              const now = Date.now();
+              const progress = Math.min(
+                100,
+                Math.max(0, ((now - stream.startTime) / (stream.endTime - stream.startTime)) * 100)
+              );
+              const isInbound = stream.receiver === currentAccount?.address;
+              const dirLabel = hedgeDirectionLabel(stream.hedgeDirection);
 
-            <div className="bg-[#FD8566] text-black border border-[#FD8566] rounded-[32px] p-8 min-h-[250px] flex flex-col justify-between relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-20 blur-[100px] pointer-events-none group-hover:opacity-30 transition-opacity duration-1000" />
-              <div className="relative z-10">
-                <h2 className="text-2xl font-display font-bold tracking-tight mb-2">DeepBook Hedge Engine</h2>
-                <p className="text-black/70 font-medium">Real-time Exposure & Collateral</p>
-              </div>
-              <div className="relative z-10 flex flex-col gap-2 mt-8">
-                <div className="flex justify-between items-center pb-2 border-b border-black/10">
-                  <span className="font-mono text-sm opacity-80">Active Hedge Streams</span>
-                  <span className="font-mono font-bold">{outCount} {outCount === 1 ? 'Contract' : 'Contracts'}</span>
-                </div>
-                <div className="flex justify-between items-center pb-2 border-b border-black/10">
-                  <span className="font-mono text-sm opacity-80">Total Hedged</span>
-                  <span className="font-mono font-bold">{totalHedgedSui.toLocaleString(undefined, { maximumFractionDigits: 2 })} SUI</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-mono text-sm opacity-80">Solvency Status</span>
-                  <span className="font-mono font-bold uppercase tracking-wider flex items-center gap-2">
-                    {outCount > 0 ? (
-                      <><span className="w-2 h-2 rounded-full bg-green-900 animate-pulse" /> Overcollateralized</>
+              return (
+                <div
+                  key={stream.id}
+                  className="flex items-center gap-4 p-4 bg-[#060608] border border-white/5 rounded-2xl hover:bg-[#141418] transition-colors duration-300"
+                >
+                  {/* Direction indicator */}
+                  <div className={`p-2 rounded-xl border ${isInbound ? "bg-green-500/5 border-green-500/10" : "bg-[#0d0d10] border-white/5"}`}>
+                    {isInbound ? (
+                      <TrendingDown size={16} className="text-green-400" />
                     ) : (
-                      <><span className="w-2 h-2 rounded-full bg-black/40" /> Idle Vault</>
+                      <Activity size={16} className="text-[#8a8690]" />
                     )}
-                  </span>
-                </div>
-              </div>
-            </div>
+                  </div>
 
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm text-[#e8e4df] font-medium">
+                        {stream.totalAmount.toFixed(2)} SUI
+                      </span>
+                      {stream.hedgeDirection !== 2 && (
+                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-widest bg-[#FF8B5E]/10 text-[#FF8B5E] border border-[#FF8B5E]/20">
+                          {dirLabel} ${stream.strikePrice.toFixed(2)}
+                        </span>
+                      )}
+                      {stream.hedgeTriggered && (
+                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-widest bg-green-500/10 text-green-400">
+                          Hedged
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-[#8a8690] font-mono truncate">
+                      {stream.sender.slice(0, 6)}...{stream.sender.slice(-4)} → {stream.receiver.slice(0, 6)}...{stream.receiver.slice(-4)}
+                    </div>
+                  </div>
+
+                  {/* Progress */}
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className="text-xs text-[#8a8690] font-mono">{progress.toFixed(0)}%</span>
+                    <div className="w-20 h-1 bg-[#141418] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-[#FF8B5E] rounded-full"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Metric Card Component ───────────────────────────────────────────────────
+
+function MetricCard({
+  icon,
+  label,
+  value,
+  sub,
+  accent,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: boolean;
+}) {
+  return (
+    <div className="bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-2xl p-5 hover:bg-[#141418]/60 transition-colors duration-300">
+      <div className="flex items-center gap-2 mb-3">
+        <div className={`p-1.5 rounded-lg border ${accent ? "bg-[#FF8B5E]/10 border-[#FF8B5E]/20 text-[#FF8B5E]" : "bg-[#060608] border-white/5 text-[#8a8690]"}`}>
+          {icon}
         </div>
-      </main>
+        <span className="text-[11px] text-[#8a8690] uppercase tracking-wider font-medium">{label}</span>
+      </div>
+      <div className="text-2xl font-display font-medium text-[#e8e4df] tracking-tight mb-1">
+        {value}
+      </div>
+      {sub && (
+        <div className="text-[11px] text-[#8a8690] font-mono">{sub}</div>
+      )}
     </div>
   );
 }

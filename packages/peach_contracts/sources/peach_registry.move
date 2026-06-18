@@ -1,0 +1,299 @@
+/// Module: `peach_contracts::peach_registry`
+///
+/// PILLAR 5: Historical Receipt Ledger — The Compliance & Audit Layer.
+///
+/// Because shared objects are completely scrubbed from global state storage when
+/// they are canceled or completed, they disappear from active object queries.
+/// This module provides an unalterable on-chain paper trail and payment stubs
+/// long after the physical contract has been purged from the ledger.
+///
+/// The `PeachRegistry` is a singleton shared object created at package publish
+/// time. It maintains a lightweight index of all streams ever created, their
+/// final status, and settlement summaries — queryable on-chain by any party.
+///
+/// Detailed claim-by-claim history is available via event indexing (the events
+/// emitted by `peach_stream` are immutable and indexed by full nodes).
+module peach_contracts::peach_registry {
+    use sui::table::{Self, Table};
+    use sui::event;
+
+    // ============================================================================
+    // Errors
+    // ============================================================================
+
+    /// Stream ID already registered (duplicate create call).
+    const EStreamAlreadyRegistered: u64 = 100;
+    /// Stream ID not found in registry.
+    const EStreamNotFound: u64 = 101;
+
+    // ============================================================================
+    // Constants — Stream Status
+    // ============================================================================
+
+    /// Stream is actively vesting.
+    const STATUS_ACTIVE: u8 = 0;
+    /// Stream was cancelled before full vesting.
+    const STATUS_CANCELED: u8 = 1;
+    /// Stream fully vested and all funds claimed.
+    const STATUS_COMPLETED: u8 = 2;
+
+    // ============================================================================
+    // Objects
+    // ============================================================================
+
+    /// Singleton shared registry tracking all Peach streams for audit/compliance.
+    /// Created once at package publish via `init`.
+    public struct PeachRegistry has key {
+        id: UID,
+        /// Map from stream object ID to its metadata record.
+        streams: Table<ID, StreamRecord>,
+        /// Total number of streams ever created.
+        total_streams: u64,
+        /// Total SUI ever escrowed across all streams (in MIST).
+        total_volume: u128,
+    }
+
+    /// Lightweight on-chain record of a stream's lifecycle.
+    /// Persists permanently even after the stream object is destroyed.
+    public struct StreamRecord has store, drop {
+        /// Stream creator (employer/sender).
+        sender: address,
+        /// Stream recipient (employee/receiver).
+        receiver: address,
+        /// Total SUI originally escrowed, in MIST.
+        total_amount: u64,
+        /// Protection strike price (scaled to 8 decimals).
+        strike_price: u64,
+        /// Hedge direction: 0=FLOOR, 1=CEILING, 2=NONE.
+        hedge_direction: u8,
+        /// Stream start time (ms since Unix epoch).
+        start_time: u64,
+        /// Stream end time (ms since Unix epoch).
+        end_time: u64,
+        /// Current status: 0=ACTIVE, 1=CANCELED, 2=COMPLETED.
+        status: u8,
+        /// Timestamp when stream was created (ms since Unix epoch).
+        created_at: u64,
+        /// Timestamp when stream was finalized (canceled/completed). 0 if active.
+        finalized_at: u64,
+        /// Amount settled to receiver on cancellation.
+        receiver_settled: u64,
+        /// Amount refunded to sender on cancellation.
+        sender_refunded: u64,
+    }
+
+    // ============================================================================
+    // Events
+    // ============================================================================
+
+    /// Emitted when a stream is registered in the ledger.
+    public struct StreamRegistered has copy, drop {
+        stream_id: ID,
+        sender: address,
+        receiver: address,
+        total_amount: u64,
+        registry_total_streams: u64,
+    }
+
+    /// Emitted when a stream's status is finalized in the ledger.
+    public struct StreamFinalized has copy, drop {
+        stream_id: ID,
+        status: u8,
+        finalized_at: u64,
+    }
+
+    // ============================================================================
+    // Init — creates the singleton registry at publish
+    // ============================================================================
+
+    /// One-time initializer that creates and shares the PeachRegistry.
+    fun init(ctx: &mut TxContext) {
+        let registry = PeachRegistry {
+            id: object::new(ctx),
+            streams: table::new(ctx),
+            total_streams: 0,
+            total_volume: 0,
+        };
+        transfer::share_object(registry);
+    }
+
+    // ============================================================================
+    // Friend-only write operations (called by peach_stream)
+    // ============================================================================
+
+    /// Register a new stream in the audit ledger.
+    /// Called by `peach_stream::create_stream`.
+    public(package) fun register_stream(
+        registry: &mut PeachRegistry,
+        stream_id: ID,
+        sender: address,
+        receiver: address,
+        total_amount: u64,
+        strike_price: u64,
+        hedge_direction: u8,
+        start_time: u64,
+        end_time: u64,
+    ) {
+        assert!(!table::contains(&registry.streams, stream_id), EStreamAlreadyRegistered);
+
+        let record = StreamRecord {
+            sender,
+            receiver,
+            total_amount,
+            strike_price,
+            hedge_direction,
+            start_time,
+            end_time,
+            status: STATUS_ACTIVE,
+            created_at: start_time,
+            finalized_at: 0,
+            receiver_settled: 0,
+            sender_refunded: 0,
+        };
+
+        table::add(&mut registry.streams, stream_id, record);
+        registry.total_streams = registry.total_streams + 1;
+        registry.total_volume = registry.total_volume + (total_amount as u128);
+
+        event::emit(StreamRegistered {
+            stream_id,
+            sender,
+            receiver,
+            total_amount,
+            registry_total_streams: registry.total_streams,
+        });
+    }
+
+    /// Record stream cancellation in the audit ledger.
+    /// Called by `peach_stream::cancel_stream`.
+    public(package) fun record_cancellation(
+        registry: &mut PeachRegistry,
+        stream_id: ID,
+        receiver_settled: u64,
+        sender_refunded: u64,
+        timestamp: u64,
+    ) {
+        assert!(table::contains(&registry.streams, stream_id), EStreamNotFound);
+
+        let record = table::borrow_mut(&mut registry.streams, stream_id);
+        record.status = STATUS_CANCELED;
+        record.finalized_at = timestamp;
+        record.receiver_settled = receiver_settled;
+        record.sender_refunded = sender_refunded;
+
+        event::emit(StreamFinalized {
+            stream_id,
+            status: STATUS_CANCELED,
+            finalized_at: timestamp,
+        });
+    }
+
+    /// Record stream completion in the audit ledger.
+    /// Called when a stream is fully vested and all funds claimed.
+    public(package) fun record_completion(
+        registry: &mut PeachRegistry,
+        stream_id: ID,
+        total_amount: u64,
+        timestamp: u64,
+    ) {
+        assert!(table::contains(&registry.streams, stream_id), EStreamNotFound);
+
+        let record = table::borrow_mut(&mut registry.streams, stream_id);
+        record.status = STATUS_COMPLETED;
+        record.finalized_at = timestamp;
+        record.receiver_settled = total_amount;
+        record.sender_refunded = 0;
+
+        event::emit(StreamFinalized {
+            stream_id,
+            status: STATUS_COMPLETED,
+            finalized_at: timestamp,
+        });
+    }
+
+    // ============================================================================
+    // Public read-only views — queryable by anyone
+    // ============================================================================
+
+    /// Check if a stream ID exists in the registry.
+    public fun stream_exists(registry: &PeachRegistry, stream_id: ID): bool {
+        table::contains(&registry.streams, stream_id)
+    }
+
+    /// Get the total number of streams ever created.
+    public fun total_streams(registry: &PeachRegistry): u64 {
+        registry.total_streams
+    }
+
+    /// Get the total volume of SUI ever escrowed (in MIST).
+    public fun total_volume(registry: &PeachRegistry): u128 {
+        registry.total_volume
+    }
+
+    /// Get the status of a stream (0=ACTIVE, 1=CANCELED, 2=COMPLETED).
+    public fun stream_status(registry: &PeachRegistry, stream_id: ID): u8 {
+        let record = table::borrow(&registry.streams, stream_id);
+        record.status
+    }
+
+    /// Get the sender of a registered stream.
+    public fun stream_sender(registry: &PeachRegistry, stream_id: ID): address {
+        let record = table::borrow(&registry.streams, stream_id);
+        record.sender
+    }
+
+    /// Get the receiver of a registered stream.
+    public fun stream_receiver(registry: &PeachRegistry, stream_id: ID): address {
+        let record = table::borrow(&registry.streams, stream_id);
+        record.receiver
+    }
+
+    /// Get the total amount escrowed for a stream.
+    public fun stream_total_amount(registry: &PeachRegistry, stream_id: ID): u64 {
+        let record = table::borrow(&registry.streams, stream_id);
+        record.total_amount
+    }
+
+    /// Get the finalization timestamp of a stream (0 if still active).
+    public fun stream_finalized_at(registry: &PeachRegistry, stream_id: ID): u64 {
+        let record = table::borrow(&registry.streams, stream_id);
+        record.finalized_at
+    }
+
+    /// Get receiver settlement amount (how much was paid out on cancel).
+    public fun stream_receiver_settled(registry: &PeachRegistry, stream_id: ID): u64 {
+        let record = table::borrow(&registry.streams, stream_id);
+        record.receiver_settled
+    }
+
+    /// Get sender refund amount (how much was returned on cancel).
+    public fun stream_sender_refunded(registry: &PeachRegistry, stream_id: ID): u64 {
+        let record = table::borrow(&registry.streams, stream_id);
+        record.sender_refunded
+    }
+
+    // ============================================================================
+    // Test-only
+    // ============================================================================
+
+    #[test_only]
+    public fun create_registry_for_testing(ctx: &mut TxContext): PeachRegistry {
+        PeachRegistry {
+            id: object::new(ctx),
+            streams: table::new(ctx),
+            total_streams: 0,
+            total_volume: 0,
+        }
+    }
+
+    #[test_only]
+    public fun share_registry_for_testing(ctx: &mut TxContext) {
+        let registry = PeachRegistry {
+            id: object::new(ctx),
+            streams: table::new(ctx),
+            total_streams: 0,
+            total_volume: 0,
+        };
+        transfer::share_object(registry);
+    }
+}

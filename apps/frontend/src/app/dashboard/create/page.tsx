@@ -4,12 +4,16 @@ import React, { useState, useRef, useEffect } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import { useRouter } from "next/navigation";
-import { Shield, ArrowRight, Zap, Lock, Info, Calendar, User, Coins } from "lucide-react";
+import { Shield, ArrowRight, Zap, Lock, Calendar, User, Coins, TrendingDown, TrendingUp } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import gsap from "gsap";
 import {
   PEACH_PACKAGE_ID,
+  PEACH_REGISTRY_ID,
   USDC_TYPE,
+  HEDGE_FLOOR,
+  HEDGE_CEILING,
+  HEDGE_NONE,
 } from "@/lib/constants";
 
 export default function CreateStreamPage() {
@@ -17,8 +21,9 @@ export default function CreateStreamPage() {
   const [recipient, setRecipient] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [isProtected, setIsProtected] = useState(true);
+  const [hedgeDirection, setHedgeDirection] = useState<number>(HEDGE_FLOOR);
   const [strikePrice, setStrikePrice] = useState("1.00");
+  const [minLotSize, setMinLotSize] = useState(""); // empty = use default
   const [isExecuting, setIsExecuting] = useState(false);
   const [txResult, setTxResult] = useState<string | null>(null);
 
@@ -36,20 +41,17 @@ export default function CreateStreamPage() {
     if (!currentAccount) router.push("/login");
   }, [currentAccount, router]);
 
-  // Subtle GSAP entrance animations
   useEffect(() => {
     const ctx = gsap.context(() => {
       gsap.fromTo(headerRef.current,
         { opacity: 0, y: 15 },
         { opacity: 1, y: 0, duration: 0.8, ease: "power2.out" }
       );
-
       gsap.fromTo([formRef.current, summaryRef.current],
         { opacity: 0, y: 20 },
         { opacity: 1, y: 0, duration: 0.8, stagger: 0.1, ease: "power2.out", delay: 0.15 }
       );
     }, containerRef);
-
     return () => ctx.revert();
   }, []);
 
@@ -69,8 +71,15 @@ export default function CreateStreamPage() {
       const txb = new Transaction();
       const amountInMist = BigInt(Math.floor(parseFloat(amount) * 1_000_000_000));
 
-      const strikePriceScaled = isProtected
-        ? BigInt(Math.floor(parseFloat(strikePrice) * 100_000_000))
+      // Strike price: 0 if HEDGE_NONE, otherwise user value scaled to 8 decimals
+      const strikePriceScaled =
+        hedgeDirection === HEDGE_NONE
+          ? BigInt(0)
+          : BigInt(Math.floor(parseFloat(strikePrice) * 100_000_000));
+
+      // Min lot size: 0 means use contract default (0.01 SUI)
+      const minLotMist = minLotSize
+        ? BigInt(Math.floor(parseFloat(minLotSize) * 1_000_000_000))
         : BigInt(0);
 
       const [streamCoin] = txb.splitCoins(txb.gas, [amountInMist]);
@@ -83,7 +92,10 @@ export default function CreateStreamPage() {
           txb.pure.u64(BigInt(startTimeMs)),
           txb.pure.u64(BigInt(endTimeMs)),
           txb.pure.u64(strikePriceScaled),
+          txb.pure.u8(hedgeDirection),
+          txb.pure.u64(minLotMist),
           streamCoin,
+          txb.object(PEACH_REGISTRY_ID),
         ],
       });
 
@@ -101,232 +113,272 @@ export default function CreateStreamPage() {
 
   const netAmount = parseFloat(amount || "0");
   const strikePriceNum = parseFloat(strikePrice || "0");
+  const isProtected = hedgeDirection !== HEDGE_NONE;
 
   return (
     <div ref={containerRef} className="relative min-h-[calc(100vh-4rem)] p-4 md:p-8 max-w-6xl mx-auto font-sans">
-      {/* Ambient Background Blobs (Fixed to prevent scroll lag) */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute top-[-5%] left-[10%] w-[50%] h-[50%] rounded-full bg-[#FF8B5E]/[0.06] blur-[120px] animate-blob" />
-        <div className="absolute top-[20%] right-[-5%] w-[40%] h-[40%] rounded-full bg-[#3898FF]/[0.05] blur-[100px] animate-blob animation-delay-2000" />
-        <div className="absolute bottom-[-10%] left-[20%] w-[45%] h-[45%] rounded-full bg-[#FF8B5E]/[0.04] blur-[100px] animate-blob animation-delay-4000" />
-      </div>
-
       {/* Header */}
-      <div ref={headerRef} className="mb-10 relative z-10 pl-2">
-        <h1 className="text-4xl text-white font-display font-semibold tracking-tight mb-3">
+      <div ref={headerRef} className="mb-10 relative z-10">
+        <h1 className="text-4xl text-[#e8e4df] font-display font-medium tracking-tight mb-3">
           Deploy Stream
         </h1>
-        <p className="text-[#8a8690] max-w-xl text-[15px] leading-relaxed">
-          Initialize a continuous, non-custodial payment stream. Enable Pyth protection to automatically hedge downside risk on-chain via DeepBook V3.
+        <p className="text-[#8a8690] max-w-xl text-sm leading-relaxed">
+          Initialize a self-hedging payment stream. Choose a protection mode to automatically
+          insulate value against market volatility via Pyth + DeepBook V3.
         </p>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 relative z-10">
-        {/* Left Column: Form Config */}
+        {/* Left Column: Form */}
         <div ref={formRef} className="xl:col-span-8 space-y-6">
-          
-          {/* Stream Config Panel */}
-          <div className="glass rounded-3xl p-8 relative overflow-hidden group">
-            <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
-            
-            <h2 className="text-lg font-medium text-white mb-8 flex items-center gap-2">
-              <span className="w-1.5 h-6 bg-[#FD8566] rounded-full inline-block" />
+
+          {/* Stream Config */}
+          <div className="bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-8">
+            <h2 className="text-base font-medium text-[#e8e4df] mb-6 flex items-center gap-2">
+              <span className="w-1.5 h-5 bg-[#FF8B5E] rounded-full inline-block" />
               Stream Details
             </h2>
 
-            <div className="space-y-6">
+            <div className="space-y-5">
               {/* Recipient */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-[#8a8690] flex items-center gap-2 ml-1">
-                  <User className="w-4 h-4" /> Recipient Address
+                <label className="text-xs font-medium text-[#8a8690] flex items-center gap-2 ml-1 uppercase tracking-wider">
+                  <User size={12} /> Recipient Address
                 </label>
                 <input
                   type="text"
                   value={recipient}
                   onChange={(e) => setRecipient(e.target.value)}
                   placeholder="0x..."
-                  className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl px-5 py-4 text-white placeholder:text-[#8a8690]/40 focus:outline-none focus:border-[#FD8566]/50 focus:ring-1 focus:ring-[#FD8566]/50 transition-all duration-300 font-mono text-sm shadow-inner"
+                  className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl px-5 py-3.5 text-[#e8e4df] placeholder:text-[#8a8690]/40 focus:outline-none focus:border-[#FF8B5E]/50 focus:ring-1 focus:ring-[#FF8B5E]/30 transition-all duration-300 font-mono text-sm"
                 />
               </div>
 
               {/* Amount */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-[#8a8690] flex items-center gap-2 ml-1">
-                  <Coins className="w-4 h-4" /> Total Amount
+                <label className="text-xs font-medium text-[#8a8690] flex items-center gap-2 ml-1 uppercase tracking-wider">
+                  <Coins size={12} /> Total Amount
                 </label>
-                <div className="relative group/input">
+                <div className="relative">
                   <input
                     type="number"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     min="0.001"
                     step="0.001"
-                    className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl pl-5 pr-16 py-4 text-white focus:outline-none focus:border-[#FD8566]/50 focus:ring-1 focus:ring-[#FD8566]/50 transition-all duration-300 text-xl font-display shadow-inner"
+                    className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl pl-5 pr-16 py-3.5 text-[#e8e4df] focus:outline-none focus:border-[#FF8B5E]/50 focus:ring-1 focus:ring-[#FF8B5E]/30 transition-all duration-300 text-xl font-display"
                   />
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#3898FF] to-[#60A5FA] flex items-center justify-center shadow-[0_0_15px_rgba(56,152,255,0.3)]">
-                      <span className="text-[10px] font-bold text-white tracking-wider">SUI</span>
-                    </div>
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-[#8a8690] font-mono">
+                    SUI
                   </div>
                 </div>
               </div>
 
               {/* Dates */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-[#8a8690] flex items-center gap-2 ml-1">
-                    <Calendar className="w-4 h-4" /> Start Time
+                  <label className="text-xs font-medium text-[#8a8690] flex items-center gap-2 ml-1 uppercase tracking-wider">
+                    <Calendar size={12} /> Start Time
                   </label>
                   <input
                     type="datetime-local"
                     value={startDate}
                     min={new Date().toISOString().slice(0, 16)}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl px-5 py-3.5 text-white focus:outline-none focus:border-[#FD8566]/50 focus:ring-1 focus:ring-[#FD8566]/50 transition-all duration-300 [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert shadow-inner"
+                    className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl px-5 py-3 text-[#e8e4df] focus:outline-none focus:border-[#FF8B5E]/50 transition-all duration-300 [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert text-sm"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-[#8a8690] flex items-center gap-2 ml-1">
-                    <Calendar className="w-4 h-4" /> End Time
+                  <label className="text-xs font-medium text-[#8a8690] flex items-center gap-2 ml-1 uppercase tracking-wider">
+                    <Calendar size={12} /> End Time
                   </label>
                   <input
                     type="datetime-local"
                     value={endDate}
                     min={startDate || new Date().toISOString().slice(0, 16)}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl px-5 py-3.5 text-white focus:outline-none focus:border-[#FD8566]/50 focus:ring-1 focus:ring-[#FD8566]/50 transition-all duration-300 [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert shadow-inner"
+                    className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl px-5 py-3 text-[#e8e4df] focus:outline-none focus:border-[#FF8B5E]/50 transition-all duration-300 [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert text-sm"
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Protection Config Panel */}
-          <div className={`glass rounded-3xl p-8 relative overflow-hidden transition-all duration-500 border ${isProtected ? "border-[#FD8566]/30 shadow-[0_0_40px_rgba(253,133,102,0.08)]" : "border-white/[0.06]"}`}>
-            {/* Glowing corner if protected */}
-            <div className={`absolute top-0 right-0 w-64 h-64 bg-[#FD8566]/10 rounded-full blur-[60px] pointer-events-none transition-opacity duration-700 ${isProtected ? "opacity-100" : "opacity-0"}`} />
+          {/* Hedge Direction Selector */}
+          <div className={`bg-[#0d0d10]/60 backdrop-blur-xl rounded-3xl p-8 transition-all duration-500 border ${isProtected ? "border-[#FF8B5E]/20" : "border-white/5"}`}>
+            <h2 className="text-base font-medium text-[#e8e4df] mb-2 flex items-center gap-2">
+              <Shield size={16} className={isProtected ? "text-[#FF8B5E]" : "text-[#8a8690]"} />
+              Protection Mode
+            </h2>
+            <p className="text-[#8a8690] text-xs mb-6 leading-relaxed">
+              Select a hedge direction based on your use case. The contract will automatically
+              swap to USDC via DeepBook V3 when the Pyth oracle price crosses your strike.
+            </p>
 
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between relative z-10 gap-6">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className={`p-2 rounded-xl transition-colors duration-500 ${isProtected ? "bg-[#FD8566]/20 text-[#FD8566]" : "bg-white/5 text-[#8a8690]"}`}>
-                    <Shield className="w-5 h-5" />
-                  </div>
-                  <h2 className={`text-lg font-medium transition-colors duration-500 ${isProtected ? "text-white glow-text" : "text-[#8a8690]"}`}>Pyth Safety Switch</h2>
-                </div>
-                <p className="text-[#8a8690] text-sm max-w-md leading-relaxed ml-11">
-                  Auto-swap your unvested SUI to USDC via DeepBook V3 if the live Pyth oracle detects a price drop below your floor.
-                </p>
-              </div>
-              
+            {/* Direction Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
               <button
-                onClick={() => setIsProtected(!isProtected)}
-                className={`relative inline-flex h-8 w-16 items-center rounded-full transition-all duration-500 flex-shrink-0 ${isProtected ? "bg-[#FD8566] shadow-[0_0_15px_rgba(253,133,102,0.4)]" : "bg-white/10"}`}
+                onClick={() => setHedgeDirection(HEDGE_FLOOR)}
+                className={`p-4 rounded-2xl border text-left transition-all duration-300 ${
+                  hedgeDirection === HEDGE_FLOOR
+                    ? "bg-[#FF8B5E]/10 border-[#FF8B5E]/30 ring-1 ring-[#FF8B5E]/20"
+                    : "bg-[#060608]/50 border-white/5 hover:border-white/10"
+                }`}
               >
-                <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform duration-500 shadow-md ${isProtected ? "translate-x-9" : "translate-x-1"}`} />
+                <TrendingDown size={18} className={hedgeDirection === HEDGE_FLOOR ? "text-[#FF8B5E] mb-2" : "text-[#8a8690] mb-2"} />
+                <div className="text-sm font-medium text-[#e8e4df] mb-1">Floor (Payroll)</div>
+                <div className="text-[10px] text-[#8a8690] leading-relaxed">
+                  Hedge when price drops below strike. Protects employee purchasing power.
+                </div>
+              </button>
+
+              <button
+                onClick={() => setHedgeDirection(HEDGE_CEILING)}
+                className={`p-4 rounded-2xl border text-left transition-all duration-300 ${
+                  hedgeDirection === HEDGE_CEILING
+                    ? "bg-[#FF8B5E]/10 border-[#FF8B5E]/30 ring-1 ring-[#FF8B5E]/20"
+                    : "bg-[#060608]/50 border-white/5 hover:border-white/10"
+                }`}
+              >
+                <TrendingUp size={18} className={hedgeDirection === HEDGE_CEILING ? "text-[#FF8B5E] mb-2" : "text-[#8a8690] mb-2"} />
+                <div className="text-sm font-medium text-[#e8e4df] mb-1">Ceiling (Supply-Chain)</div>
+                <div className="text-[10px] text-[#8a8690] leading-relaxed">
+                  Hedge when price rises above strike. Protects buyer material costs.
+                </div>
+              </button>
+
+              <button
+                onClick={() => setHedgeDirection(HEDGE_NONE)}
+                className={`p-4 rounded-2xl border text-left transition-all duration-300 ${
+                  hedgeDirection === HEDGE_NONE
+                    ? "bg-white/5 border-white/15 ring-1 ring-white/10"
+                    : "bg-[#060608]/50 border-white/5 hover:border-white/10"
+                }`}
+              >
+                <Zap size={18} className={hedgeDirection === HEDGE_NONE ? "text-[#e8e4df] mb-2" : "text-[#8a8690] mb-2"} />
+                <div className="text-sm font-medium text-[#e8e4df] mb-1">None (Raw Stream)</div>
+                <div className="text-[10px] text-[#8a8690] leading-relaxed">
+                  No hedging. Stream raw SUI directly with no oracle protection.
+                </div>
               </button>
             </div>
 
-            <div className={`transition-all duration-500 overflow-hidden relative z-10 ${isProtected ? "max-h-40 mt-8 opacity-100" : "max-h-0 mt-0 opacity-0"}`}>
-              <div className="pt-6 border-t border-white/[0.06] ml-11">
-                <label className="text-sm font-medium text-white/80 mb-3 flex items-center gap-2">
-                  <Lock className="w-3.5 h-3.5 text-[#FD8566]" /> Strike Price Floor (USD per SUI)
-                </label>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                  <div className="relative w-full sm:w-64">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8a8690] font-medium">$</span>
+            {/* Strike Price + Min Lot (shown when protected) */}
+            {isProtected && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-white/5">
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-[#8a8690] flex items-center gap-2 ml-1 uppercase tracking-wider">
+                    <Lock size={12} /> Strike Price (USD/SUI)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8a8690]">$</span>
                     <input
                       type="number"
                       value={strikePrice}
                       onChange={(e) => setStrikePrice(e.target.value)}
                       step="0.01"
                       min="0.01"
-                      className="w-full bg-[#060608]/80 border border-[#FD8566]/30 hover:border-[#FD8566]/60 rounded-xl pl-8 pr-4 py-3 text-white focus:outline-none focus:border-[#FD8566] focus:ring-1 focus:ring-[#FD8566]/50 transition-all duration-300 font-mono shadow-inner"
+                      className="w-full bg-[#060608]/80 border border-[#FF8B5E]/20 hover:border-[#FF8B5E]/40 rounded-xl pl-8 pr-4 py-3 text-[#e8e4df] focus:outline-none focus:border-[#FF8B5E] transition-all duration-300 font-mono text-sm"
                     />
                   </div>
+                  <p className="text-[9px] text-[#8a8690] ml-1">
+                    {hedgeDirection === HEDGE_FLOOR ? "Hedge fires when spot < this price" : "Hedge fires when spot > this price"}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-[#8a8690] flex items-center gap-2 ml-1 uppercase tracking-wider">
+                    Min Lot Size (SUI)
+                  </label>
+                  <input
+                    type="number"
+                    value={minLotSize}
+                    onChange={(e) => setMinLotSize(e.target.value)}
+                    step="0.001"
+                    min="0"
+                    placeholder="0.01 (default)"
+                    className="w-full bg-[#060608]/80 border border-white/[0.08] hover:border-white/[0.15] rounded-xl px-4 py-3 text-[#e8e4df] placeholder:text-[#8a8690]/40 focus:outline-none focus:border-[#FF8B5E]/50 transition-all duration-300 font-mono text-sm"
+                  />
+                  <p className="text-[9px] text-[#8a8690] ml-1">
+                    Sub-lot claims buffer until this threshold. Leave empty for default.
+                  </p>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
-        {/* Right Column: Receipt & Deploy */}
+        {/* Right Column: Summary & Deploy */}
         <div ref={summaryRef} className="xl:col-span-4">
-          <div className="glass rounded-3xl p-1 relative overflow-hidden sticky top-8">
-            <div className="bg-[#0a0a0c]/40 rounded-[22px] p-6 lg:p-8 h-full border border-white/[0.02]">
-              
-              <div className="flex items-center gap-3 mb-8">
-                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
-                  <Zap className="w-4 h-4 text-[#FD8566]" />
-                </div>
-                <h3 className="text-white font-medium text-lg">Transaction Summary</h3>
+          <div className="bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-6 sticky top-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+                <Zap size={14} className="text-[#FF8B5E]" />
               </div>
-
-              <div className="space-y-4 mb-8">
-                <div className="flex justify-between items-end pb-4 border-b border-white/[0.06] border-dashed">
-                  <span className="text-[#8a8690] text-sm">Escrow Amount</span>
-                  <div className="text-right">
-                    <span className="text-white text-xl font-display font-medium">{netAmount.toFixed(3)}</span>
-                    <span className="text-[#8a8690] text-sm ml-1">SUI</span>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center pb-4 border-b border-white/[0.06] border-dashed">
-                  <span className="text-[#8a8690] text-sm">Protection</span>
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${isProtected ? "bg-[#FD8566]/10 text-[#FD8566] border border-[#FD8566]/20" : "bg-white/5 text-[#8a8690] border border-white/10"}`}>
-                    {isProtected ? "ACTIVE" : "OFF"}
-                  </span>
-                </div>
-                {isProtected && (
-                  <div className="flex justify-between items-center pb-4 border-b border-white/[0.06] border-dashed animate-in fade-in duration-300">
-                    <span className="text-[#8a8690] text-sm">Strike Floor</span>
-                    <span className="text-white font-mono text-sm">${strikePriceNum.toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-center pb-2">
-                  <span className="text-[#8a8690] text-sm">Oracle</span>
-                  <span className="text-[#8a8690] text-sm flex items-center gap-1.5">
-                    {isProtected && <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />}
-                    {isProtected ? "Pyth Network" : "None"}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                onClick={handleCreate}
-                disabled={isExecuting || !currentAccount || !amount || !recipient || !startDate || !endDate}
-                className="group relative w-full bg-[#FD8566] hover:bg-white disabled:bg-white/10 disabled:text-white/40 disabled:cursor-not-allowed text-white hover:text-black font-semibold rounded-2xl py-4.5 flex items-center justify-center gap-2 transition-all duration-500 overflow-hidden"
-              >
-                {/* Button Hover Sweep Effect */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-700 ease-out" />
-                
-                {isExecuting ? (
-                  <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <span>Sign & Deploy</span>
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
-                  </>
-                )}
-              </button>
-
-              {txResult && (
-                <div className="mt-5 p-4 bg-green-500/10 border border-green-500/20 rounded-2xl animate-in slide-in-from-bottom-2 fade-in duration-300">
-                  <p className="text-green-400 text-xs font-mono text-center flex flex-col gap-1">
-                    <span className="font-semibold text-sm">✓ Transaction Confirmed</span>
-                    <span className="opacity-80 truncate">{txResult}</span>
-                  </p>
-                </div>
-              )}
-
-              {!currentAccount && (
-                <p className="text-center text-xs text-[#FD8566] mt-5 flex items-center justify-center gap-1.5">
-                  <Info className="w-3.5 h-3.5" /> Please connect your Sui wallet
-                </p>
-              )}
+              <h3 className="text-[#e8e4df] font-medium">Transaction Summary</h3>
             </div>
+
+            <div className="space-y-3 mb-6">
+              <SummaryRow label="Escrow Amount" value={`${netAmount.toFixed(3)} SUI`} />
+              <SummaryRow
+                label="Protection"
+                value={
+                  hedgeDirection === HEDGE_FLOOR ? "Floor (Payroll)" :
+                  hedgeDirection === HEDGE_CEILING ? "Ceiling (Supply)" : "None"
+                }
+                accent={isProtected}
+              />
+              {isProtected && (
+                <>
+                  <SummaryRow label="Strike" value={`$${strikePriceNum.toFixed(2)}`} />
+                  <SummaryRow
+                    label="Direction"
+                    value={hedgeDirection === HEDGE_FLOOR ? "Spot < Strike → Swap" : "Spot > Strike → Swap"}
+                  />
+                </>
+              )}
+              <SummaryRow
+                label="Min Lot"
+                value={minLotSize ? `${parseFloat(minLotSize).toFixed(3)} SUI` : "0.01 SUI (default)"}
+              />
+              <SummaryRow label="Oracle" value={isProtected ? "Pyth Network" : "None"} />
+              <SummaryRow label="DEX" value={isProtected ? "DeepBook V3" : "None"} />
+            </div>
+
+            <button
+              onClick={handleCreate}
+              disabled={isExecuting || !currentAccount || !amount || !recipient || !startDate || !endDate}
+              className="w-full bg-[#FF8B5E] hover:bg-[#FFB088] disabled:bg-white/10 disabled:text-white/40 disabled:cursor-not-allowed text-black font-semibold rounded-2xl py-4 flex items-center justify-center gap-2 transition-colors duration-300"
+            >
+              {isExecuting ? (
+                <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>
+                  <span>Sign & Deploy</span>
+                  <ArrowRight size={16} />
+                </>
+              )}
+            </button>
+
+            {txResult && (
+              <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-xl">
+                <p className="text-green-400 text-xs font-mono text-center flex flex-col gap-1">
+                  <span className="font-semibold text-sm">Transaction Confirmed</span>
+                  <span className="opacity-80 truncate">{txResult}</span>
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="flex justify-between items-center py-2 border-b border-white/5 last:border-0">
+      <span className="text-xs text-[#8a8690]">{label}</span>
+      <span className={`text-xs font-mono ${accent ? "text-[#FF8B5E]" : "text-[#e8e4df]"}`}>{value}</span>
     </div>
   );
 }
