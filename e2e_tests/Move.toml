@@ -1,0 +1,12 @@
+[package]
+name = "peach_e2e_tests"
+edition = "2024.beta" # edition = "legacy" to use legacy (pre-2024) Move
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet-v1.58.2" }
+peach_contracts = { local = "../packages/peach_contracts" }
+# Wait, if peach_contracts has its own Pyth dependency, importing mock_pyth here as Pyth won't override it for peach_contracts unless we use overrides.
+# Actually, since Sui Move 2024 doesn't support workspace overrides natively without `[workspace]`, let's just see if importing it works or if we must use `[dev-dependencies]` in `peach_contracts`.
+
+[dep-replacements]
+Pyth = { local = "mock_pyth", package = "Pyth" }
