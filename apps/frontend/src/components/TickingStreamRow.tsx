@@ -38,6 +38,13 @@ interface StreamConfig {
   strikePrice?: number;
   hedgeDirection?: number;
   hedgeTriggered?: boolean;
+  withdrawn?: number;
+  // v2 dual-asset state machine fields
+  liquidationStatus?: number; // 0=HEALTHY, 1=TWAP_ACTIVE, 2=FULLY_HEDGED
+  twapTranches?: number;
+  tranchesExecuted?: number;
+  usdcBalance?: number;
+  suiBalance?: number;
 }
 
 export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config: StreamConfig; pythSpotPrice?: number }) {
@@ -190,6 +197,9 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
   // Dynamic fee calculation mirroring the smart contract
   const [estimatedFee, setEstimatedFee] = useState(0);
   const [isDangerZone, setIsDangerZone] = useState(false);
+  const [willHedge, setWillHedge] = useState(false);
+
+  const unclaimed = Math.max(0, balance - (config.withdrawn || 0));
 
   useEffect(() => {
     let baseBps = 50;
@@ -201,19 +211,23 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
     const strike = config.strikePrice || 0;
     const hedgeDirection = config.hedgeDirection ?? 2;
     let danger = false;
+    let hedge = false;
 
     if (strike > 0 && hedgeDirection !== 2 && pythSpotPrice > 0) {
       if (hedgeDirection === 0) { // FLOOR
+        if (pythSpotPrice < strike) { hedge = true; }
         if (pythSpotPrice < strike * 1.05) { riskBps = 150; danger = true; }
       } else if (hedgeDirection === 1) { // CEILING
+        if (pythSpotPrice > strike) { hedge = true; }
         if (pythSpotPrice > strike * 0.95) { riskBps = 150; danger = true; }
       }
     }
 
     const totalBps = baseBps + riskBps;
-    setEstimatedFee((balance * totalBps) / 10000);
+    setEstimatedFee((unclaimed * totalBps) / 10000);
     setIsDangerZone(danger);
-  }, [balance, config.targetValue, config.strikePrice, config.hedgeDirection, pythSpotPrice]);
+    setWillHedge(hedge);
+  }, [unclaimed, config.targetValue, config.strikePrice, config.hedgeDirection, pythSpotPrice]);
 
   useGSAP(() => {
     if (!progressBarRef.current || !flowBgRef.current) return;
@@ -289,6 +303,16 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
                   Hedged
                 </span>
               )}
+              {config.liquidationStatus === 1 && (
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-widest bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+                  TWAP {config.tranchesExecuted || 0}/{config.twapTranches || 5}
+                </span>
+              )}
+              {config.liquidationStatus === 2 && (
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-widest bg-green-500/10 text-green-400 border border-green-500/20">
+                  Protected
+                </span>
+              )}
             </div>
             <div className="text-[10px] text-[#8a8690] font-mono mt-1">
               {config.sender.slice(0, 6)}...{config.sender.slice(-4)} → {config.receiver.slice(0, 6)}...{config.receiver.slice(-4)}
@@ -303,6 +327,11 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
           <div className="text-[10px] text-[#8a8690] mt-0.5">
             of {config.targetValue.toLocaleString()} SUI
           </div>
+          {(config.usdcBalance ?? 0) > 0 && (
+            <div className="text-[10px] text-green-400 font-mono mt-0.5">
+              + {((config.usdcBalance ?? 0) / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+            </div>
+          )}
         </div>
       </div>
 
@@ -327,9 +356,25 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
         </div>
       )}
 
+      {/* TWAP Progress (shown when hedging is active) */}
+      {config.liquidationStatus === 1 && (config.twapTranches ?? 0) > 0 && (
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-[9px] text-[#8a8690] uppercase tracking-wider whitespace-nowrap">TWAP</span>
+          <div className="flex-1 h-1 bg-[#141418] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-yellow-400/80 rounded-full transition-all duration-500"
+              style={{ width: `${((config.tranchesExecuted ?? 0) / (config.twapTranches ?? 5)) * 100}%` }}
+            />
+          </div>
+          <span className="text-[9px] text-[#8a8690] font-mono whitespace-nowrap">
+            {config.tranchesExecuted ?? 0}/{config.twapTranches ?? 5}
+          </span>
+        </div>
+      )}
+
       {/* Actions & Fee Info */}
       <div className="flex justify-between items-center mt-2">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-1">
           {estimatedFee > 0 && (
             <div className="flex flex-col">
               <span className="text-[10px] text-[#8a8690] uppercase tracking-wider">Protocol Fee</span>
@@ -339,22 +384,35 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
               </span>
             </div>
           )}
+          {unclaimed > 0.0001 && (
+            <div className="flex flex-col">
+              <span className="text-[10px] text-[#8a8690] uppercase tracking-wider">Will Receive</span>
+              <span className="text-[11px] font-mono font-medium text-[#e8e4df]">
+                {willHedge ? "~ USDC (Hedged)" : "SUI"}
+              </span>
+            </div>
+          )}
         </div>
-        <div className="flex justify-end gap-2">
-          {(config.type === "inbound" || config.type === "self") && (
+        <div className="flex justify-end gap-2 items-center">
+          {(config.withdrawn || 0) > 0 && (
+             <span className="text-[10px] text-[#8a8690] mr-2">
+               Claimed: {(config.withdrawn || 0).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })} SUI
+             </span>
+          )}
+          {(config.type === "inbound" || config.type === "self") && unclaimed > 0.0001 && (
             <button
               onClick={() => executeClaimTransaction(config.id)}
               disabled={isProcessing}
-              className="px-4 py-1.5 bg-[#FF8B5E] text-black text-xs font-semibold rounded-lg hover:bg-[#FFB088] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-1.5 bg-[#FF8B5E] text-black text-xs font-semibold rounded-lg hover:bg-[#FFB088] transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
-              {isProcessing ? "Processing..." : "Claim"}
+              {isProcessing ? "Processing..." : `Claim ${unclaimed.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`}
             </button>
           )}
           {(config.type === "outbound" || config.type === "self") && !hasStarted && (
             <button
               onClick={() => executeCancelTransaction(config.id)}
               disabled={isProcessing}
-              className="px-4 py-1.5 bg-[#0d0d10] border border-white/5 text-[#e8e4df] text-xs font-medium rounded-lg hover:bg-[#141418] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-1.5 bg-[#0d0d10] border border-white/5 text-[#e8e4df] text-xs font-medium rounded-lg hover:bg-[#141418] transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
               {isProcessing ? "Processing..." : "Cancel"}
             </button>

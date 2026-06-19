@@ -3,62 +3,56 @@
 import React, { useState } from "react";
 import Header from "@/components/Header";
 import AnimatedHeroBackground from "@/components/AnimatedHeroBackground";
-import { Book, Shield, Zap, TrendingDown, TrendingUp, Coins, Activity, Lock, ArrowRight } from "lucide-react";
+import { TrendingDown, TrendingUp, ShieldAlert, BarChart3, ArrowRight, DollarSign, Activity } from "lucide-react";
 import Link from "next/link";
 
-export default function DocsPage() {
-  const [activeTab, setActiveTab] = useState("intro");
+export default function PerformancePage() {
+  const [activeTab, setActiveTab] = useState("summary");
 
   return (
-    <div className="min-h-screen bg-[#060608] flex flex-col font-sans relative overflow-hidden">
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <AnimatedHeroBackground />
-      </div>
+    <div className="min-h-screen flex flex-col relative bg-[#060608] overflow-x-hidden w-full max-w-full font-sans">
+      <AnimatedHeroBackground />
 
       <Header />
 
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-8 py-12 flex flex-col md:flex-row gap-8 relative z-10">
+      <main className="flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-8 xl:px-16 pt-32 pb-12 flex flex-col md:flex-row gap-8 relative z-10">
         
         {/* Sidebar Navigation */}
         <aside className="w-full md:w-64 shrink-0 space-y-1">
-          <div className="text-xs font-semibold text-[#8a8690] uppercase tracking-wider mb-4 ml-3">Documentation</div>
+          <div className="text-xs font-semibold text-[#8a8690] uppercase tracking-wider mb-4 ml-3">Performance Data</div>
           
           <NavButton 
-            id="intro" 
-            active={activeTab === "intro"} 
-            onClick={() => setActiveTab("intro")} 
-            icon={<Book size={16} />} 
-            label="What is Peach?" 
+            active={activeTab === "summary"} 
+            onClick={() => setActiveTab("summary")} 
+            icon={<BarChart3 size={16} />} 
+            label="Platform Impact" 
           />
           <NavButton 
-            id="modes" 
-            active={activeTab === "modes"} 
-            onClick={() => setActiveTab("modes")} 
-            icon={<Shield size={16} />} 
-            label="Protection Modes" 
+            active={activeTab === "case1"} 
+            onClick={() => setActiveTab("case1")} 
+            icon={<TrendingDown size={16} />} 
+            label="Payroll (Floor)" 
           />
           <NavButton 
-            id="fees" 
-            active={activeTab === "fees"} 
-            onClick={() => setActiveTab("fees")} 
-            icon={<Coins size={16} />} 
-            label="Fee Structure" 
+            active={activeTab === "case2"} 
+            onClick={() => setActiveTab("case2")} 
+            icon={<TrendingUp size={16} />} 
+            label="Vendors (Ceiling)" 
           />
           <NavButton 
-            id="claiming" 
-            active={activeTab === "claiming"} 
-            onClick={() => setActiveTab("claiming")} 
-            icon={<Zap size={16} />} 
-            label="Claiming Streams" 
+            active={activeTab === "simulator"} 
+            onClick={() => setActiveTab("simulator")} 
+            icon={<Activity size={16} />} 
+            label="Live Simulation" 
           />
         </aside>
 
         {/* Main Content Area */}
-        <section className="flex-1 bg-[#0d0d10]/60 border border-white/5 rounded-3xl p-8 md:p-12">
-          {activeTab === "intro" && <IntroSection />}
-          {activeTab === "modes" && <ModesSection />}
-          {activeTab === "fees" && <FeesSection />}
-          {activeTab === "claiming" && <ClaimingSection />}
+        <section className="flex-1 bg-[#0d0d10]/60 border border-white/5 rounded-3xl p-6 md:p-8 overflow-x-auto">
+          {activeTab === "summary" && <SummaryStatsSection />}
+          {activeTab === "case1" && <CaseStudyOne />}
+          {activeTab === "case2" && <CaseStudyTwo />}
+          {activeTab === "simulator" && <SimulatorSection />}
         </section>
 
       </main>
@@ -67,7 +61,7 @@ export default function DocsPage() {
 }
 
 // --- Navigation Button ---
-function NavButton({ id, active, onClick, icon, label }: { id: string, active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
+function NavButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
   return (
     <button
       onClick={onClick}
@@ -85,191 +79,255 @@ function NavButton({ id, active, onClick, icon, label }: { id: string, active: b
 
 // --- Content Sections ---
 
-function IntroSection() {
+function SummaryStatsSection() {
   return (
-    <div className="space-y-6 text-[#e8e4df] leading-relaxed">
-      <h1 className="text-3xl font-display font-medium tracking-tight mb-2">Welcome to Peach Protocol</h1>
-      <p className="text-[#8a8690] text-lg mb-8">
-        Peach is a smart-contract protocol on the Sui network that allows you to stream payments over time, while automatically hedging against market volatility.
+    <div className="space-y-6 text-[#e8e4df]">
+      <h1 className="text-2xl font-display font-medium tracking-tight mb-2">Protocol Projections</h1>
+      <p className="text-[#8a8690] text-sm mb-6">
+        Peach doesn't just move tokens; it preserves financial energy. Here are the projected performance improvements of our auto-hedging infrastructure against market volatility.
       </p>
-      
-      <div className="bg-[#060608] border border-white/5 p-6 rounded-2xl">
-        <h3 className="text-xl font-medium mb-3 flex items-center gap-2">
-          <Activity className="text-[#FF8B5E]" size={20} /> The Problem
-        </h3>
-        <p className="text-[#8a8690]">
-          When you lock tokens into a standard vesting contract or payment stream for months or years, you are at the absolute mercy of market volatility. If the token crashes by 50%, the employee receiving the stream loses 50% of their purchasing power.
-        </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="bg-[#060608] border border-white/5 p-5 rounded-2xl">
+          <div className="text-[#8a8690] text-[10px] font-bold uppercase tracking-wider mb-2">Projected Value Retention</div>
+          <div className="text-3xl font-mono text-green-400 mb-1">Up to +260%</div>
+          <div className="text-xs text-[#8a8690]">Vs. unhedged streams during severe drawdowns</div>
+        </div>
+        <div className="bg-[#060608] border border-white/5 p-5 rounded-2xl">
+          <div className="text-[#8a8690] text-[10px] font-bold uppercase tracking-wider mb-2">Treasury Liability Cap</div>
+          <div className="text-3xl font-mono text-[#FF8B5E] mb-1">-70% Risk</div>
+          <div className="text-xs text-[#8a8690]">Reduction in B2B overpayment exposure</div>
+        </div>
+        <div className="bg-[#060608] border border-white/5 p-5 rounded-2xl">
+          <div className="text-[#8a8690] text-[10px] font-bold uppercase tracking-wider mb-2">Slippage Mitigation</div>
+          <div className="text-3xl font-mono text-white mb-1">&lt; 1.5%</div>
+          <div className="text-xs text-[#8a8690]">Target max variance via DeepBook V3 routing</div>
+        </div>
       </div>
 
-      <div className="bg-[#060608] border border-white/5 p-6 rounded-2xl">
-        <h3 className="text-xl font-medium mb-3 flex items-center gap-2">
-          <Shield className="text-green-400" size={20} /> The Peach Solution
+      <div className="bg-[#141418] border border-[#FF8B5E]/20 p-6 rounded-2xl">
+        <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
+          <ShieldAlert className="text-[#FF8B5E]" size={18} /> Projected Impact: 42% Black Swan Crash
         </h3>
-        <p className="text-[#8a8690]">
-          Peach solves this by acting as an "autonomous hedge fund" for your payment streams. By integrating with the <strong>Pyth Network Oracle</strong> (for live price feeds) and <strong>DeepBook V3</strong> (for decentralized trading), Peach streams can automatically swap their unvested SUI into stablecoins (USDC) the exact moment the market crosses your safety threshold.
+        <p className="text-[#8a8690] text-sm mb-4">
+          During a modeled 42% market crash over a 72-hour window, standard unhedged streams lose nearly half their value. 
         </p>
+        <div className="flex items-end gap-6 h-32 mt-6">
+          <div className="flex-1 flex flex-col justify-end items-center gap-2">
+            <div className="w-full bg-red-500/20 rounded-t-lg relative group h-[58%] border-t border-red-500/50">
+              <div className="absolute -top-6 left-0 right-0 text-center text-xs font-mono text-red-400">-42% Loss</div>
+            </div>
+            <div className="text-xs text-[#8a8690]">Standard Stream</div>
+          </div>
+          <div className="flex-1 flex flex-col justify-end items-center gap-2">
+            <div className="w-full bg-green-500/20 rounded-t-lg relative group h-[96%] border-t border-green-500/50">
+              <div className="absolute -top-6 left-0 right-0 text-center text-xs font-mono text-green-400">-4% (Slippage Model)</div>
+            </div>
+            <div className="text-xs text-[#8a8690] font-semibold text-white">Peach Floor Projection</div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function ModesSection() {
+function CaseStudyOne() {
   return (
-    <div className="space-y-8 text-[#e8e4df] leading-relaxed">
-      <div>
-        <h1 className="text-3xl font-display font-medium tracking-tight mb-2">Protection Modes</h1>
-        <p className="text-[#8a8690] text-lg">
-          When creating a stream, you can choose between two primary hedging directions depending on your goals.
-        </p>
+    <div className="space-y-6 text-[#e8e4df]">
+      <h1 className="text-2xl font-display font-medium tracking-tight mb-2">Employee Payroll (Crash Projection)</h1>
+      <p className="text-[#8a8690] text-sm mb-6">
+        How a "Floor" stream mathematically guarantees your employees can pay rent even if the crypto market collapses.
+      </p>
+
+      <div className="bg-[#060608] border border-white/5 p-6 rounded-2xl mb-6">
+        <h3 className="text-white font-medium mb-4">The Setup: Hiring a Lead Developer</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div>
+            <div className="text-[#8a8690] text-xs mb-1">Total Compensation</div>
+            <div className="font-mono text-white">120,000 SUI</div>
+          </div>
+          <div>
+            <div className="text-[#8a8690] text-xs mb-1">Duration</div>
+            <div className="font-mono text-white">12 Months</div>
+          </div>
+          <div>
+            <div className="text-[#8a8690] text-xs mb-1">Starting Price</div>
+            <div className="font-mono text-white">$1.00 / SUI</div>
+          </div>
+          <div>
+            <div className="text-[#8a8690] text-xs mb-1">Peach Floor Set</div>
+            <div className="font-mono text-green-400">$0.90 / SUI</div>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-[#060608] border border-white/5 p-6 rounded-2xl flex flex-col h-full">
-          <div className="w-12 h-12 bg-[#FF8B5E]/10 rounded-xl flex items-center justify-center mb-4 border border-[#FF8B5E]/20">
-            <TrendingDown className="text-[#FF8B5E]" size={24} />
-          </div>
-          <h3 className="text-xl font-medium mb-2">Floor (Downside Protection)</h3>
-          <p className="text-[#8a8690] mb-4 flex-1">
-            The hedge fires when the SUI price drops <strong>below</strong> your Strike Price.
-          </p>
-          <div className="bg-white/5 p-4 rounded-xl text-sm border border-white/5">
-            <span className="font-semibold text-[#e8e4df]">Best For:</span> Payroll and employee compensation. Ensures that no matter how low the market drops, employees are guaranteed a minimum fiat equivalent value to pay rent and living expenses.
-          </div>
-        </div>
-
-        <div className="bg-[#060608] border border-white/5 p-6 rounded-2xl flex flex-col h-full">
-          <div className="w-12 h-12 bg-[#FF8B5E]/10 rounded-xl flex items-center justify-center mb-4 border border-[#FF8B5E]/20">
-            <TrendingUp className="text-[#FF8B5E]" size={24} />
-          </div>
-          <h3 className="text-xl font-medium mb-2">Ceiling (Upside Protection)</h3>
-          <p className="text-[#8a8690] mb-4 flex-1">
-            The hedge fires when the SUI price rises <strong>above</strong> your Strike Price.
-          </p>
-          <div className="bg-white/5 p-4 rounded-xl text-sm border border-white/5">
-            <span className="font-semibold text-[#e8e4df]">Best For:</span> B2B Supply chain contracts. If you agreed to pay a supplier a fixed amount of SUI over a year, but SUI 10x's in value, you drastically overpaid. A ceiling swaps the SUI to USDC if it gets too expensive.
-          </div>
-        </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm border-collapse bg-white/5 rounded-xl overflow-hidden">
+          <thead>
+            <tr className="border-b border-white/10 bg-black/20">
+              <th className="py-4 px-4 text-[#8a8690] font-medium">Timeline</th>
+              <th className="py-4 px-4 text-[#8a8690] font-medium">Modeled SUI Price</th>
+              <th className="py-4 px-4 text-[#8a8690] font-medium text-right">Unprotected Projection</th>
+              <th className="py-4 px-4 text-[#8a8690] font-medium text-right">Peach Hedged Projection</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-white/5 hover:bg-white/5">
+              <td className="py-4 px-4 font-medium">Month 1 (Normal)</td>
+              <td className="py-4 px-4 font-mono">$1.05</td>
+              <td className="py-4 px-4 text-right font-mono">$10,500</td>
+              <td className="py-4 px-4 text-right font-mono">$10,500</td>
+            </tr>
+            <tr className="border-b border-white/5 hover:bg-white/5 bg-red-500/5">
+              <td className="py-4 px-4 font-medium text-red-400">Month 4 (Crash)</td>
+              <td className="py-4 px-4 font-mono text-red-400">$0.40</td>
+              <td className="py-4 px-4 text-right font-mono text-red-400">$4,000 <span className="text-[10px] block opacity-70">-60% Purchasing Power</span></td>
+              <td className="py-4 px-4 text-right font-mono text-green-400">$9,000 <span className="text-[10px] block opacity-70">+125% Improvement</span></td>
+            </tr>
+            <tr className="border-b border-white/5 hover:bg-white/5 bg-red-500/10">
+              <td className="py-4 px-4 font-medium text-red-500">Month 7 (Bear Market)</td>
+              <td className="py-4 px-4 font-mono text-red-400">$0.25</td>
+              <td className="py-4 px-4 text-right font-mono text-red-400">$2,500 <span className="text-[10px] block opacity-70">-75% Purchasing Power</span></td>
+              <td className="py-4 px-4 text-right font-mono text-green-400">$9,000 <span className="text-[10px] block opacity-70">+260% Improvement</span></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
       
-      <div className="bg-[#FF8B5E]/5 border border-[#FF8B5E]/20 p-5 rounded-2xl flex items-start gap-4">
-        <Lock className="text-[#FF8B5E] shrink-0 mt-1" size={20} />
+      <div className="flex items-center gap-3 p-4 bg-green-500/10 border border-green-500/20 rounded-xl mt-6">
+        <DollarSign className="text-green-400" size={24} />
         <div>
-          <h4 className="text-[#FF8B5E] font-medium mb-1">What is a Strike Price?</h4>
-          <p className="text-[#8a8690] text-sm">
-            The Strike Price is the exact USD value per SUI where your protection activates. For example, if SUI is currently $1.00, and you set a Floor at $0.90, the smart contract will do absolutely nothing until SUI drops below $0.90. Once it does, it sells the SUI into USDC to protect the remaining value.
-          </p>
+          <div className="text-sm font-semibold text-green-400">Projected Peak Retention: Up to +260% Better vs Unhedged</div>
+          <div className="text-xs text-[#8a8690] mt-1">The developer retains their livelihood because their income is mathematically protected by Peach infrastructure.</div>
         </div>
       </div>
     </div>
   );
 }
 
-function FeesSection() {
+function CaseStudyTwo() {
   return (
-    <div className="space-y-8 text-[#e8e4df] leading-relaxed">
-      <div>
-        <h1 className="text-3xl font-display font-medium tracking-tight mb-2">Fee Structure</h1>
-        <p className="text-[#8a8690] text-lg">
-          Peach uses a transparent, volume-based fee model with dynamic risk premiums. Fees are <strong>only deducted upon claiming</strong>, and they are calculated on the claimed amount.
-        </p>
-      </div>
-
-      <div>
-        <h3 className="text-xl font-medium mb-4 flex items-center gap-2">
-          <Coins className="text-[#FF8B5E]" size={20} /> Volume Tier Discounts
-        </h3>
-        <p className="text-[#8a8690] mb-4">
-          The larger the total stream size, the lower your base fee rate. This incentivizes large institutional streams while keeping small retail streams sustainable.
-        </p>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-white/10">
-                <th className="py-3 px-4 text-[#8a8690] font-medium uppercase tracking-wider text-xs">Total Stream Amount</th>
-                <th className="py-3 px-4 text-[#8a8690] font-medium uppercase tracking-wider text-xs">Base Fee</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                <td className="py-3 px-4 font-mono">&lt; 1,000 SUI</td>
-                <td className="py-3 px-4 font-mono text-[#FF8B5E]">0.50%</td>
-              </tr>
-              <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                <td className="py-3 px-4 font-mono">1,000 - 4,999 SUI</td>
-                <td className="py-3 px-4 font-mono text-[#FF8B5E]">0.30%</td>
-              </tr>
-              <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                <td className="py-3 px-4 font-mono">5,000 - 9,999 SUI</td>
-                <td className="py-3 px-4 font-mono text-[#FF8B5E]">0.20%</td>
-              </tr>
-              <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                <td className="py-3 px-4 font-mono">&ge; 10,000 SUI</td>
-                <td className="py-3 px-4 font-mono text-green-400">0.10%</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="bg-[#141418] border border-white/5 p-6 rounded-2xl">
-        <h3 className="text-xl font-medium mb-2 text-[#FF8B5E] flex items-center gap-2">
-          ⚠️ The Danger Zone (Risk Premium)
-        </h3>
-        <p className="text-[#8a8690] mb-4">
-          If you claim your stream while the live Pyth spot price is within <strong>5% of your Strike Price</strong>, the system considers the stream to be in the "Danger Zone". 
-        </p>
-        <p className="text-[#8a8690] mb-4">
-          Because the protocol is actively executing high-stakes atomic hedges to protect your downside (or upside) during this volatile period, a temporary <strong>1.50% Risk Premium</strong> is added to your fee.
-        </p>
-        <div className="text-sm border-l-2 border-[#FF8B5E] pl-4 text-[#8a8690] italic">
-          Tip: To avoid the risk premium, simply wait for the market to stabilize away from your strike price before claiming your tokens.
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ClaimingSection() {
-  return (
-    <div className="space-y-6 text-[#e8e4df] leading-relaxed">
-      <h1 className="text-3xl font-display font-medium tracking-tight mb-2">Claiming & Auto-Hedging</h1>
-      <p className="text-[#8a8690] text-lg mb-8">
-        How value moves from the locked escrow to your wallet.
+    <div className="space-y-6 text-[#e8e4df]">
+      <h1 className="text-2xl font-display font-medium tracking-tight mb-2">B2B Vendors (Spike Projection)</h1>
+      <p className="text-[#8a8690] text-sm mb-6">
+        How a "Ceiling" stream prevents you from accidentally overpaying a supplier by 300% when your token moons.
       </p>
 
-      <div className="grid grid-cols-1 gap-4">
-        <div className="bg-[#060608] border border-white/5 p-6 rounded-2xl">
-          <h3 className="text-xl font-medium mb-2 text-white">Continuous Vesting</h3>
-          <p className="text-[#8a8690]">
-            Streams vest continuously, second by second. You do not have to wait for the end of the stream to access your funds. You can claim the unlocked portion at any time from your Dashboard.
-          </p>
+      <div className="bg-[#060608] border border-white/5 p-6 rounded-2xl mb-6">
+        <h3 className="text-white font-medium mb-4">The Setup: Marketing Agency Contract</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div>
+            <div className="text-[#8a8690] text-xs mb-1">Total Budget</div>
+            <div className="font-mono text-white">60,000 SUI</div>
+          </div>
+          <div>
+            <div className="text-[#8a8690] text-xs mb-1">Monthly Release</div>
+            <div className="font-mono text-white">5,000 SUI</div>
+          </div>
+          <div>
+            <div className="text-[#8a8690] text-xs mb-1">Starting Price</div>
+            <div className="font-mono text-white">$1.00 / SUI</div>
+          </div>
+          <div>
+            <div className="text-[#8a8690] text-xs mb-1">Peach Ceiling Set</div>
+            <div className="font-mono text-[#FF8B5E]">$1.20 / SUI</div>
+          </div>
         </div>
+      </div>
 
-        <div className="bg-[#060608] border border-white/5 p-6 rounded-2xl">
-          <h3 className="text-xl font-medium mb-2 text-white">The Hedge Trigger</h3>
-          <p className="text-[#8a8690]">
-            The magic of Peach happens <em>during the claim transaction</em>. When you click "Claim", the protocol first fetches the latest SUI price from the Pyth network. If the price crosses your strike threshold, the protocol will automatically take the unvested portion of your stream and route it through DeepBook V3 to swap it into USDC.
-          </p>
-        </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm border-collapse bg-white/5 rounded-xl overflow-hidden">
+          <thead>
+            <tr className="border-b border-white/10 bg-black/20">
+              <th className="py-4 px-4 text-[#8a8690] font-medium">Timeline</th>
+              <th className="py-4 px-4 text-[#8a8690] font-medium">Modeled SUI Price</th>
+              <th className="py-4 px-4 text-[#8a8690] font-medium text-right">Unprotected Liability</th>
+              <th className="py-4 px-4 text-[#8a8690] font-medium text-right">Peach Capped Liability</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-white/5 hover:bg-white/5">
+              <td className="py-4 px-4 font-medium">Month 1 (Normal)</td>
+              <td className="py-4 px-4 font-mono">$1.00</td>
+              <td className="py-4 px-4 text-right font-mono">$5,000</td>
+              <td className="py-4 px-4 text-right font-mono">$5,000</td>
+            </tr>
+            <tr className="border-b border-white/5 hover:bg-white/5 bg-[#FF8B5E]/10">
+              <td className="py-4 px-4 font-medium text-[#FF8B5E]">Month 3 (Bull Run)</td>
+              <td className="py-4 px-4 font-mono text-[#FF8B5E]">$2.50</td>
+              <td className="py-4 px-4 text-right font-mono text-red-400">$12,500 <span className="text-[10px] block opacity-70">Overpayment Risk</span></td>
+              <td className="py-4 px-4 text-right font-mono text-green-400">$6,000 <span className="text-[10px] block opacity-70">Liability Reduced 52%</span></td>
+            </tr>
+            <tr className="border-b border-white/5 hover:bg-white/5 bg-[#FF8B5E]/20">
+              <td className="py-4 px-4 font-medium text-[#FF8B5E]">Month 6 (Mega Pump)</td>
+              <td className="py-4 px-4 font-mono text-[#FF8B5E]">$4.00</td>
+              <td className="py-4 px-4 text-right font-mono text-red-400">$20,000 <span className="text-[10px] block opacity-70">Severe Treasury Bleed</span></td>
+              <td className="py-4 px-4 text-right font-mono text-green-400">$6,000 <span className="text-[10px] block opacity-70">Liability Reduced 70%</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SimulatorSection() {
+  return (
+    <div className="space-y-6 text-[#e8e4df]">
+      <h1 className="text-2xl font-display font-medium tracking-tight mb-2">Live Math Simulation</h1>
+      <p className="text-[#8a8690] text-sm mb-6">
+        See exactly how the smart contract executes a Floor claim during a crash event.
+      </p>
+
+      <div className="bg-[#060608] border border-white/5 p-6 rounded-2xl font-mono text-sm shadow-2xl shadow-black">
+        <div className="text-green-400 mb-6 font-bold tracking-widest">{`> INITIALIZING PEACH_STREAM::CLAIM_STREAM`}</div>
         
-        <div className="bg-[#060608] border border-white/5 p-6 rounded-2xl">
-          <h3 className="text-xl font-medium mb-2 text-white">Sub-Lot Buffering</h3>
-          <p className="text-[#8a8690]">
-            DeepBook has a minimum trade size. If the amount of SUI that needs to be hedged is too small to trade on DeepBook, the smart contract will temporarily log it as "Hedge Debt" and buffer it until the unvested amount crosses the minimum lot size, at which point it executes the swap.
-          </p>
+        <div className="space-y-4 text-[#8a8690]">
+          <div className="flex justify-between border-b border-white/5 pb-3">
+            <span>[1] Unlocked Tokens Request:</span>
+            <span className="text-white">5,000.00 SUI</span>
+          </div>
+          <div className="flex justify-between border-b border-white/5 pb-3">
+            <span>[2] Checking Stream Floor Strike:</span>
+            <span className="text-white">$0.95 USD/SUI</span>
+          </div>
+          <div className="flex justify-between border-b border-white/5 pb-3 bg-red-500/5 p-2 rounded">
+            <span className="text-red-400">[3] Oracle Pyth Spot Price:</span>
+            <span className="text-red-400">$0.60 USD/SUI (CRASH DETECTED)</span>
+          </div>
+          <div className="flex justify-between border-b border-white/5 pb-3">
+            <span>[4] Decision Matrix:</span>
+            <span className="text-green-400 bg-green-400/10 px-2 py-0.5 rounded">EXECUTE HEDGE</span>
+          </div>
+          <div className="flex justify-between border-b border-white/5 pb-3">
+            <span>[5] Routing via DeepBook V3:</span>
+            <span className="text-white">Hedging 5,000 SUI at limit</span>
+          </div>
+          <div className="flex justify-between border-b border-white/5 pb-3">
+            <span>[6] Standard Unprotected Value:</span>
+            <span>$3,000.00</span>
+          </div>
+          <div className="flex justify-between border-b border-white/5 pb-3 text-green-400">
+            <span>[7] Peach Protected Value (at $0.95):</span>
+            <span>$4,750.00</span>
+          </div>
+          <div className="flex justify-between pt-4 text-white font-bold text-lg bg-white/5 p-4 rounded-xl mt-2">
+            <span>FINAL CLAIM OUTPUT:</span>
+            <span className="text-green-400">+$1,750.00 Saved</span>
+          </div>
         </div>
       </div>
       
       <div className="mt-8 pt-6 border-t border-white/10 flex justify-end">
         <Link 
           href="/dashboard/create" 
-          className="flex items-center gap-2 bg-[#e8e4df] text-black px-6 py-3 rounded-xl font-medium hover:bg-white transition-colors"
+          className="flex items-center gap-2 bg-white text-black px-6 py-3 rounded-xl text-sm font-semibold hover:scale-105 transition-all duration-300 shadow-xl shadow-white/10"
         >
-          Create your first stream <ArrowRight size={16} />
+          Protect Your Treasury <ArrowRight size={16} />
         </Link>
       </div>
     </div>
   );
 }
+
+

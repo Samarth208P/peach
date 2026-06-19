@@ -13,8 +13,7 @@ module peach_contracts::peach_fee_tests {
     fun test_base_fee_tiers() {
         let claimable = 100 * ONE_SUI;
         let spot_price = 100_000_000;
-        let strike_price = 100_000_000;
-        
+
         // < 1000 SUI -> 50 bps
         let total_amount_1 = 500 * ONE_SUI;
         let fee_1 = peach_stream::calculate_fee_for_testing(claimable, total_amount_1, spot_price, 0, HEDGE_NONE);
@@ -39,21 +38,21 @@ module peach_contracts::peach_fee_tests {
     #[test]
     fun test_risk_premium_floor() {
         let claimable = 100 * ONE_SUI;
-        let total_amount = 500 * ONE_SUI; // Base fee = 50 bps
+        let total_amount = 500 * ONE_SUI;
         let strike_price = 100_000_000;
 
-        // Spot well above strike -> Safe zone -> No risk premium -> 50 bps
-        let spot_safe = 110_000_000; // 110% of strike
+        // Spot well above strike -> Safe zone -> 50 bps
+        let spot_safe = 110_000_000;
         let fee_safe = peach_stream::calculate_fee_for_testing(claimable, total_amount, spot_safe, strike_price, HEDGE_FLOOR);
         assert!(fee_safe == (claimable * 50) / 10_000, 0);
 
-        // Spot very close to strike -> Danger zone (<105%) -> Risk premium (+150 bps) -> 200 bps
-        let spot_danger = 104_000_000; // 104% of strike
+        // Spot close to strike (<105%) -> Danger -> 200 bps
+        let spot_danger = 104_000_000;
         let fee_danger = peach_stream::calculate_fee_for_testing(claimable, total_amount, spot_danger, strike_price, HEDGE_FLOOR);
         assert!(fee_danger == (claimable * 200) / 10_000, 1);
 
-        // Spot below strike -> Danger zone -> Risk premium -> 200 bps
-        let spot_broken = 90_000_000; // 90% of strike
+        // Spot below strike -> Danger -> 200 bps
+        let spot_broken = 90_000_000;
         let fee_broken = peach_stream::calculate_fee_for_testing(claimable, total_amount, spot_broken, strike_price, HEDGE_FLOOR);
         assert!(fee_broken == (claimable * 200) / 10_000, 2);
     }
@@ -61,21 +60,21 @@ module peach_contracts::peach_fee_tests {
     #[test]
     fun test_risk_premium_ceiling() {
         let claimable = 100 * ONE_SUI;
-        let total_amount = 500 * ONE_SUI; // Base fee = 50 bps
+        let total_amount = 500 * ONE_SUI;
         let strike_price = 100_000_000;
 
-        // Spot well below strike -> Safe zone -> No risk premium -> 50 bps
-        let spot_safe = 90_000_000; // 90% of strike
+        // Spot well below strike -> Safe -> 50 bps
+        let spot_safe = 90_000_000;
         let fee_safe = peach_stream::calculate_fee_for_testing(claimable, total_amount, spot_safe, strike_price, HEDGE_CEILING);
         assert!(fee_safe == (claimable * 50) / 10_000, 0);
 
-        // Spot very close to strike -> Danger zone (>95%) -> Risk premium (+150 bps) -> 200 bps
-        let spot_danger = 96_000_000; // 96% of strike
+        // Spot close to strike (>95%) -> Danger -> 200 bps
+        let spot_danger = 96_000_000;
         let fee_danger = peach_stream::calculate_fee_for_testing(claimable, total_amount, spot_danger, strike_price, HEDGE_CEILING);
         assert!(fee_danger == (claimable * 200) / 10_000, 1);
 
-        // Spot above strike -> Danger zone -> Risk premium -> 200 bps
-        let spot_broken = 110_000_000; // 110% of strike
+        // Spot above strike -> Danger -> 200 bps
+        let spot_broken = 110_000_000;
         let fee_broken = peach_stream::calculate_fee_for_testing(claimable, total_amount, spot_broken, strike_price, HEDGE_CEILING);
         assert!(fee_broken == (claimable * 200) / 10_000, 2);
     }

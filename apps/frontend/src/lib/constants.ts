@@ -40,6 +40,11 @@ export const HEDGE_FLOOR = 0;    // Downside protection (payroll)
 export const HEDGE_CEILING = 1;  // Upside protection (supply-chain)
 export const HEDGE_NONE = 2;     // No hedging (raw streaming)
 
+// ── TWAP Presets ─────────────────────────────────────────────────────────────
+export const PRESET_RETAIL = 0;        // 3 tranches, 5 min intervals (15 min total)
+export const PRESET_CORPORATE = 1;     // 5 tranches, 12 min intervals (1 hr total)
+export const PRESET_INSTITUTIONAL = 2; // 10 tranches, 18 min intervals (3 hr total)
+
 // ── Default Min Lot Size ─────────────────────────────────────────────────────
 export const DEFAULT_MIN_LOT_SIZE = BigInt(10_000_000);
 

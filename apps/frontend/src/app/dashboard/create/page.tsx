@@ -4,10 +4,9 @@ import React, { useState, useRef, useEffect } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import { useRouter } from "next/navigation";
-import { Shield, ArrowRight, Zap, Lock, Calendar, User, Coins, TrendingDown, TrendingUp } from "lucide-react";
+import { Shield, ArrowRight, Zap, Lock, Calendar, User, Coins, TrendingDown } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import gsap from "gsap";
-import CustomSelect from "@/components/CustomSelect";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import {
@@ -17,6 +16,9 @@ import {
   HEDGE_FLOOR,
   PYTH_HERMES_BASE_URL,
   PYTH_SUI_USD_FEED_ID,
+  PRESET_RETAIL,
+  PRESET_CORPORATE,
+  PRESET_INSTITUTIONAL,
 } from "@/lib/constants";
 
 export default function CreateStreamPage() {
@@ -30,14 +32,7 @@ export default function CreateStreamPage() {
   const [pythPrices, setPythPrices] = useState<Record<string, number>>({});
   const [estimatedFee, setEstimatedFee] = useState<number>(0);
   const [isDangerZone, setIsDangerZone] = useState<boolean>(false);
-  const [targetAsset, setTargetAsset] = useState<string>("SUI/USD");
-
-  const SUPPORTED_ASSETS = [
-    { id: "SUI/USD", name: "SUI/USD (Default)", feedId: PYTH_SUI_USD_FEED_ID },
-    { id: "SUI/XAU", name: "Gold (SUI/XAU)", feedId: "30a19158f5a54c0adf8fb7560627343f22a1bc852b89d56be1accdc5dbf96d0e" },
-    { id: "SUI/XAG", name: "Silver (SUI/XAG)", feedId: "321ba4d608fa75ba76d6d73daa715abcbdeb9dba02257f05a1b59178b49f599b" },
-    { id: "SUI/XPT", name: "Platinum (SUI/XPT)", feedId: "70685b5375c3bbb6f4c588f77c128c62f5470415b9f6c3776c1da46ac7225715" },
-  ];
+  const [twapPreset, setTwapPreset] = useState<number>(PRESET_CORPORATE);
 
   const currentAccount = useCurrentAccount();
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
@@ -67,35 +62,26 @@ export default function CreateStreamPage() {
     return () => ctx.revert();
   }, []);
 
-  // Derived Spot Price
+  // Derived Spot Price (SUI/USD only)
   const pythSpotPrice = React.useMemo(() => {
     const suiFeedId = PYTH_SUI_USD_FEED_ID.replace('0x', '');
-    const targetFeedId = SUPPORTED_ASSETS.find(a => a.id === targetAsset)?.feedId?.replace('0x', '') || suiFeedId;
-    
-    if (!pythPrices[suiFeedId]) return null;
-    if (targetFeedId === suiFeedId) return pythPrices[suiFeedId];
-    if (!pythPrices[targetFeedId]) return null;
-    return pythPrices[suiFeedId] / pythPrices[targetFeedId];
-  }, [pythPrices, targetAsset]);
+    return pythPrices[suiFeedId] || null;
+  }, [pythPrices]);
 
-  // Fetch Pyth Prices for all assets
+  // Fetch SUI/USD price from Pyth
   useEffect(() => {
     const fetchPrices = async () => {
       try {
         const suiFeedId = PYTH_SUI_USD_FEED_ID.replace("0x", "");
-        let queryUrl = `${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${suiFeedId}`;
-        SUPPORTED_ASSETS.forEach(a => {
-          if (a.feedId !== PYTH_SUI_USD_FEED_ID) {
-            queryUrl += `&ids[]=${a.feedId.replace("0x", "")}`;
-          }
-        });
-        
-        const res = await fetch(queryUrl);
+        const res = await fetch(
+          `${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${suiFeedId}&parsed=true`
+        );
+        if (!res.ok) return;
         const json = await res.json();
         
         const newPrices: Record<string, number> = {};
         json?.parsed?.forEach((p: any) => {
-          if (p.price) {
+          if (p?.price) {
             const priceUsd = parseFloat(p.price.price) * Math.pow(10, p.price.expo);
             newPrices[p.id] = priceUsd;
           }
@@ -171,6 +157,7 @@ export default function CreateStreamPage() {
           txb.pure.u64(BigInt(endTimeMs)),
           txb.pure.u64(strikePriceScaled),
           txb.pure.u8(HEDGE_FLOOR), // Always use floor
+          txb.pure.u8(twapPreset),
           txb.pure.u64(minLotMist),
           streamCoin,
           txb.object(PEACH_REGISTRY_ID),
@@ -287,19 +274,6 @@ export default function CreateStreamPage() {
               </div>
 
               {/* Asset Pair */}
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-[#8a8690] flex items-center gap-2 ml-1 uppercase tracking-wider">
-                  <TrendingUp size={12} /> Protection Target
-                </label>
-                <div className="relative z-10">
-                  <CustomSelect
-                    value={targetAsset}
-                    onChange={setTargetAsset}
-                    options={SUPPORTED_ASSETS}
-                  />
-                </div>
-              </div>
-
               {/* Amount */}
               <div className="space-y-2">
                 <label className="text-xs font-medium text-[#8a8690] flex items-center gap-2 ml-1 uppercase tracking-wider">
@@ -408,7 +382,7 @@ export default function CreateStreamPage() {
             <div className="bg-[#060608]/50 border border-[#FF8B5E]/10 rounded-2xl p-4 flex items-center justify-between">
               <div>
                 <div className="text-[10px] text-[#8a8690] uppercase tracking-wider mb-1">Auto-Configured Strike Price</div>
-                <div className="text-lg font-mono text-[#e8e4df]">{targetAsset === "SUI/USD" ? "$" : ""}{derivedStrike.toLocaleString(undefined, { maximumFractionDigits: targetAsset === "SUI/USD" ? 4 : 8 })}</div>
+                <div className="text-lg font-mono text-[#e8e4df]">${derivedStrike.toLocaleString(undefined, { maximumFractionDigits: 4 })}</div>
               </div>
               <div className="text-right">
                 <div className="text-[10px] text-[#8a8690] uppercase tracking-wider mb-1">Activation</div>
@@ -416,6 +390,73 @@ export default function CreateStreamPage() {
                   Spot drops {riskDropPct.toFixed(1)}%
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* TWAP Liquidation Speed */}
+          <div className="bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-8 relative z-10">
+            <h2 className="text-base font-medium text-[#e8e4df] mb-2 flex items-center gap-2">
+              <Lock size={16} className="text-[#FF8B5E]" />
+              Liquidation Speed
+            </h2>
+            <p className="text-[#8a8690] text-xs mb-6 leading-relaxed">
+              When the hedge triggers, the unvested principal is converted to stablecoins in metered tranches
+              to minimize market impact. Choose a speed matching your stream size.
+            </p>
+
+            <div className="grid grid-cols-3 gap-3">
+              <button
+                onClick={() => setTwapPreset(PRESET_RETAIL)}
+                className={`relative rounded-2xl border p-4 text-left transition-all duration-300 ${
+                  twapPreset === PRESET_RETAIL
+                    ? "border-[#FF8B5E]/60 bg-[#FF8B5E]/5"
+                    : "border-white/[0.08] bg-[#060608]/50 hover:border-white/[0.15]"
+                }`}
+              >
+                <div className="text-xs font-medium text-[#e8e4df] mb-1">Fast</div>
+                <div className="text-[10px] text-[#8a8690]">3 tranches</div>
+                <div className="text-[10px] text-[#8a8690]">15 min total</div>
+                {twapPreset === PRESET_RETAIL && (
+                  <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#FF8B5E]" />
+                )}
+              </button>
+
+              <button
+                onClick={() => setTwapPreset(PRESET_CORPORATE)}
+                className={`relative rounded-2xl border p-4 text-left transition-all duration-300 ${
+                  twapPreset === PRESET_CORPORATE
+                    ? "border-[#FF8B5E]/60 bg-[#FF8B5E]/5"
+                    : "border-white/[0.08] bg-[#060608]/50 hover:border-white/[0.15]"
+                }`}
+              >
+                <div className="text-xs font-medium text-[#e8e4df] mb-1">Standard</div>
+                <div className="text-[10px] text-[#8a8690]">5 tranches</div>
+                <div className="text-[10px] text-[#8a8690]">1 hour total</div>
+                {twapPreset === PRESET_CORPORATE && (
+                  <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#FF8B5E]" />
+                )}
+              </button>
+
+              <button
+                onClick={() => setTwapPreset(PRESET_INSTITUTIONAL)}
+                className={`relative rounded-2xl border p-4 text-left transition-all duration-300 ${
+                  twapPreset === PRESET_INSTITUTIONAL
+                    ? "border-[#FF8B5E]/60 bg-[#FF8B5E]/5"
+                    : "border-white/[0.08] bg-[#060608]/50 hover:border-white/[0.15]"
+                }`}
+              >
+                <div className="text-xs font-medium text-[#e8e4df] mb-1">Gradual</div>
+                <div className="text-[10px] text-[#8a8690]">10 tranches</div>
+                <div className="text-[10px] text-[#8a8690]">3 hours total</div>
+                {twapPreset === PRESET_INSTITUTIONAL && (
+                  <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#FF8B5E]" />
+                )}
+              </button>
+            </div>
+
+            <div className="mt-4 text-[9px] text-[#8a8690] leading-relaxed px-1">
+              Fast suits retail streams (&lt;1k SUI). Standard suits corporate payroll (1k-10k).
+              Gradual suits institutional invoices (10k+) to minimize order-book impact.
             </div>
           </div>
         </div>
@@ -432,13 +473,14 @@ export default function CreateStreamPage() {
 
             <div className="space-y-3 mb-6">
               <SummaryRow label="Escrow Amount" value={`${netAmount.toFixed(3)} SUI`} />
-              <SummaryRow label="Auto-Strike Price" value={pythSpotPrice ? `${targetAsset === "SUI/USD" ? "$" : ""}${derivedStrike.toLocaleString(undefined, { maximumFractionDigits: targetAsset === "SUI/USD" ? 4 : 8 })} ${targetAsset !== "SUI/USD" ? targetAsset : ""}` : "Fetching..."} accent={true} />
+              <SummaryRow label="Auto-Strike Price" value={pythSpotPrice ? `$${derivedStrike.toLocaleString(undefined, { maximumFractionDigits: 4 })}` : "Fetching..."} accent={true} />
               <SummaryRow
                 label="Minimum Trade Size"
                 value="0.01 SUI"
               />
               <SummaryRow label="Price Oracle" value="Pyth Network" />
               <SummaryRow label="Liquidity" value="DeepBook V3" />
+              <SummaryRow label="TWAP Preset" value={twapPreset === PRESET_RETAIL ? "Fast (3x5min)" : twapPreset === PRESET_CORPORATE ? "Standard (5x12min)" : "Gradual (10x18min)"} />
               
               <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
                 <SummaryRow 

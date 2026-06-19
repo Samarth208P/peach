@@ -46,32 +46,30 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchPrices = async () => {
       try {
-        const ids = [
-          "50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266", // SUI
-          "30a19158f5a54c0adf8fb7560627343f22a1bc852b89d56be1accdc5dbf96d0e", // Gold
-          "321ba4d608fa75ba76d6d73daa715abcbdeb9dba02257f05a1b59178b49f599b", // Silver
-          "70685b5375c3bbb6f4c588f77c128c62f5470415b9f6c3776c1da46ac7225715"  // Platinum
-        ];
+        // SUI/USD is the primary feed; other commodities use separate queries
+        const suiFeedId = "23d7315113f5b1d3ba7a83604c44b94d79f4fd69af77f804fc7f920a6dc65744";
         const res = await fetch(
-          `${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${ids.join("&ids[]=")}`
+          `${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${suiFeedId}&parsed=true`
         );
+        if (!res.ok) return;
         const json = await res.json();
         if (json?.parsed) {
           const prices: Record<string, number> = {};
           json.parsed.forEach((p: any) => {
-            const price = parseFloat(p.price.price) * Math.pow(10, p.price.expo);
-            if (p.id === "50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266") prices.SUI = price;
-            if (p.id === "30a19158f5a54c0adf8fb7560627343f22a1bc852b89d56be1accdc5dbf96d0e") prices.XAU = price;
-            if (p.id === "321ba4d608fa75ba76d6d73daa715abcbdeb9dba02257f05a1b59178b49f599b") prices.XAG = price;
-            if (p.id === "70685b5375c3bbb6f4c588f77c128c62f5470415b9f6c3776c1da46ac7225715") prices.XPT = price;
+            if (p?.price) {
+              const price = parseFloat(p.price.price) * Math.pow(10, p.price.expo);
+              if (p.id === suiFeedId) prices.SUI = price;
+            }
           });
           setAssetPrices(prices);
         }
       } catch (err) {
-        console.error(err);
+        console.error("Price fetch error:", err);
       }
     };
     fetchPrices();
+    const interval = setInterval(fetchPrices, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   // Query StreamCreated events
@@ -237,9 +235,6 @@ export default function DashboardPage() {
             </div>
             <div className="flex flex-col gap-5">
               <PriceRow name="SUI" symbol="SUI/USD" price={assetPrices.SUI} />
-              <PriceRow name="Gold" symbol="XAU/USD" price={assetPrices.XAU} />
-              <PriceRow name="Silver" symbol="XAG/USD" price={assetPrices.XAG} />
-              <PriceRow name="Platinum" symbol="XPT/USD" price={assetPrices.XPT} />
             </div>
           </div>
         </div>

@@ -12,7 +12,10 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "dev:frontend": "npm run dev --workspace=apps/frontend",
+    "dev:keeper": "npm run dev --workspace=@peach/keeper",
     "start": "turbo run start",
+    "start:keeper": "npm run start --workspace=@peach/keeper",
     "lint": "turbo run lint"
   },
   "devDependencies": {

@@ -33,7 +33,9 @@
     "react-datepicker": "^9.1.0",
     "react-dom": "19.2.4",
     "react-latex-next": "^3.0.0",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "swagger-ui-react": "^5.32.6",
+    "swagger-ui-themes": "^3.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

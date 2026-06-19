@@ -19,6 +19,7 @@ interface StreamConfig {
   strikePrice: number;
   hedgeDirection: number;
   hedgeTriggered: boolean;
+  withdrawn: number;
 }
 
 export default function StreamsPage() {
@@ -107,6 +108,7 @@ export default function StreamsPage() {
               strikePrice: Number(fields.strike_price) / 1e8,
               hedgeDirection: Number(fields.hedge_direction),
               hedgeTriggered: fields.hedge_triggered === true,
+              withdrawn: Number(fields.withdrawn) / 1e9,
             });
           }
         });
