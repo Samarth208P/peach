@@ -1,0 +1,97 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Peach Protocol API",
+    "description": "API Reference for interacting with Peach Protocol on the Sui network. Note: These are representations of smart contract interactions via Sui RPC.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://fullnode.mainnet.sui.io",
+      "description": "Sui Mainnet RPC"
+    }
+  ],
+  "paths": {
+    "/sui_executeTransactionBlock": {
+      "post": {
+        "summary": "Create a Peach Stream",
+        "description": "Creates a new volatility-insured payment stream by executing a Move call to `peach_stream::new`.",
+        "tags": [
+          "Streams"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "jsonrpc": {
+                    "type": "string",
+                    "example": "2.0"
+                  },
+                  "method": {
+                    "type": "string",
+                    "example": "sui_executeTransactionBlock"
+                  },
+                  "params": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "txBytes",
+                      ["signature1"],
+                      {"showEffects": true}
+                    ]
+                  },
+                  "id": {
+                    "type": "integer",
+                    "example": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stream created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sui_getObjectsOwnedByAddress": {
+      "get": {
+        "summary": "List User Streams",
+        "description": "Fetches the streams owned by a specific address. You must filter by the `PeachStream` struct type.",
+        "tags": [
+          "Streams"
+        ],
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "0x123...abc"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of streams"
+          }
+        }
+      }
+    }
+  }
+}
