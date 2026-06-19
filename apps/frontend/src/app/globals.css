@@ -117,3 +117,37 @@ input[type=number] {
 .animation-delay-4000 {
   animation-delay: 4s;
 }
+
+/* Dapp-kit Theme Overrides */
+:root, body, .dapp-kit-provider {
+  --dapp-kit-colors-body: #e8e4df !important;
+  --dapp-kit-colors-bodyMuted: #8a8690 !important;
+  --dapp-kit-colors-iconButton: #e8e4df !important;
+  --dapp-kit-backgroundColors-iconButtonHover: rgba(255,255,255,0.05) !important;
+  
+  --dapp-kit-backgroundColors-modalOverlay: rgba(6,6,8,0.8) !important;
+  --dapp-kit-blurs-modalOverlay: blur(10px) !important;
+  --dapp-kit-backgroundColors-modalPrimary: #0d0d10 !important;
+  --dapp-kit-backgroundColors-modalSecondary: #060608 !important;
+  
+  --dapp-kit-backgroundColors-primaryButton: #060608 !important;
+  --dapp-kit-backgroundColors-primaryButtonHover: #141418 !important;
+  --dapp-kit-colors-primaryButton: #e8e4df !important;
+  --dapp-kit-shadows-primaryButton: 0 0 0 1px rgba(255,255,255,0.08) !important;
+  
+  --dapp-kit-borderColors-outlineButton: rgba(255,255,255,0.06) !important;
+  --dapp-kit-colors-outlineButton: #e8e4df !important;
+  --dapp-kit-backgroundColors-outlineButtonHover: rgba(255,255,255,0.05) !important;
+  
+  --dapp-kit-backgroundColors-walletItemHover: rgba(255,255,255,0.05) !important;
+  --dapp-kit-backgroundColors-walletItemSelected: rgba(255,255,255,0.1) !important;
+  
+  --dapp-kit-backgroundColors-dropdownMenu: #0d0d10 !important;
+  --dapp-kit-backgroundColors-dropdownMenuSeparator: rgba(255,255,255,0.06) !important;
+  
+  --dapp-kit-typography-fontFamily: var(--font-sans) !important;
+  --dapp-kit-radii-xlarge: 1.5rem !important;
+  --dapp-kit-radii-large: 1rem !important;
+  --dapp-kit-radii-medium: 0.75rem !important;
+  --dapp-kit-radii-small: 0.5rem !important;
+}

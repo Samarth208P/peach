@@ -448,6 +448,136 @@ module peach_contracts::peach_stream {
         };
     }
 
+    public fun claim_stream_relative<USDC>(
+        stream: &mut PeachStream<USDC>,
+        base_price_info: &PriceInfoObject,
+        quote_price_info: &PriceInfoObject,
+        deepbook_pool: &mut Pool<SUI, USDC>,
+        deep_fee: Coin<DEEP>,
+        registry: &mut PeachRegistry,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(ctx.sender() == stream.receiver, ENotReceiver);
+
+        let now = clock.timestamp_ms();
+        let claimable = newly_vested(stream, now);
+        assert!(claimable > 0, ENoFundsUnlocked);
+        stream.withdrawn = stream.withdrawn + claimable;
+
+        let stream_id = stream.id.to_inner();
+        let receiver = stream.receiver;
+        let sender = stream.sender;
+
+        // --- PILLAR 1: Atomic Stop-Loss Evaluation ---
+        let spot_price = read_relative_spot_price(base_price_info, quote_price_info, clock);
+        let needs_hedge = should_hedge(stream.strike_price, stream.hedge_direction, spot_price);
+
+        // --- PROTOCOL FEE DEDUCTION ---
+        let fee_amount = calculate_fee(
+            claimable,
+            stream.total_amount,
+            spot_price,
+            stream.strike_price,
+            stream.hedge_direction
+        );
+        let net_claimable = claimable - fee_amount;
+
+        if (fee_amount > 0) {
+            let fee_coin = coin::take(&mut stream.balance, fee_amount, ctx);
+            peach_registry::deposit_fee(registry, fee_coin.into_balance());
+        };
+
+        let usdc_hedge_out = if (needs_hedge) {
+            // --- PILLAR 3: Hedge Rollover Accumulator ---
+            let total_to_hedge = net_claimable + stream.accumulated_hedge_debt;
+
+            if (total_to_hedge >= stream.min_lot_size) {
+                // Execute the atomic swap for full amount (current + accumulated)
+                let accumulated_cleared = stream.accumulated_hedge_debt;
+                stream.accumulated_hedge_debt = 0;
+                stream.hedge_triggered = true;
+
+                event::emit(HedgeTriggered {
+                    stream_id,
+                    spot_price,
+                    strike_price: stream.strike_price,
+                    sui_swapped: total_to_hedge,
+                    hedge_direction: stream.hedge_direction,
+                    accumulated_debt_cleared: accumulated_cleared,
+                });
+
+                let sui_in = coin::take(&mut stream.balance, total_to_hedge, ctx);
+                let usdc_out = swap_sui_to_usdc(
+                    deepbook_pool,
+                    sui_in,
+                    deep_fee,
+                    &mut stream.balance,
+                    sender,
+                    clock,
+                    ctx,
+                );
+                let usdc_value = coin::value(&usdc_out);
+                stream.total_hedged_amount = stream.total_hedged_amount + total_to_hedge;
+                transfer::public_transfer(usdc_out, receiver);
+                usdc_value
+            } else {
+                // Sub-lot: accumulate debt, pay out raw SUI to keep claim smooth
+                stream.accumulated_hedge_debt = total_to_hedge;
+
+                event::emit(HedgeDebtAccumulated {
+                    stream_id,
+                    amount_buffered: net_claimable,
+                    total_debt: total_to_hedge,
+                    min_lot_size: stream.min_lot_size,
+                });
+
+                refund_deep(deep_fee, sender);
+                let payout = coin::take(&mut stream.balance, net_claimable, ctx);
+                transfer::public_transfer(payout, receiver);
+                0
+            }
+        } else {
+            // No hedge needed — pay raw SUI
+            // If there was accumulated debt and price recovered, clear it
+            if (stream.accumulated_hedge_debt > 0) {
+                stream.accumulated_hedge_debt = 0;
+            };
+            refund_deep(deep_fee, sender);
+            let payout = coin::take(&mut stream.balance, net_claimable, ctx);
+            transfer::public_transfer(payout, receiver);
+            0
+        };
+
+        event::emit(StreamClaimed {
+            stream_id,
+            claimer: receiver,
+            sui_claimed: net_claimable,
+            fee_deducted: fee_amount,
+            usdc_hedge_out,
+            execution_price: spot_price,
+            hedge_debt_accumulated: stream.accumulated_hedge_debt,
+            timestamp: now,
+        });
+
+        // Check if stream is fully vested and drained
+        if (stream.withdrawn >= stream.total_amount && balance::value(&stream.balance) == 0) {
+            peach_registry::record_completion(
+                registry,
+                stream_id,
+                stream.total_amount,
+                now,
+            );
+            event::emit(StreamCompleted {
+                stream_id,
+                sender,
+                receiver,
+                total_amount: stream.total_amount,
+                total_hedged: stream.total_hedged_amount,
+            });
+        };
+    }
+
     /// --- PILLAR 4: Corporate Salvage Mechanism ---
     ///
     /// Cancel a stream. Earned-but-unclaimed SUI is settled to the receiver
@@ -497,6 +627,117 @@ module peach_contracts::peach_stream {
         // Settle receiver's earned portion (with hedging if applicable)
         if (settle > 0) {
             let spot_price = read_spot_price(price_info, clock);
+            if (should_hedge(strike_price, hedge_direction, spot_price)) {
+                event::emit(HedgeTriggered {
+                    stream_id,
+                    spot_price,
+                    strike_price,
+                    sui_swapped: settle,
+                    hedge_direction,
+                    accumulated_debt_cleared: 0,
+                });
+                let sui_in = coin::take(&mut balance, settle, ctx);
+                let usdc_out = swap_sui_to_usdc(
+                    deepbook_pool,
+                    sui_in,
+                    deep_fee,
+                    &mut balance,
+                    sender,
+                    clock,
+                    ctx,
+                );
+                transfer::public_transfer(usdc_out, receiver);
+            } else {
+                refund_deep(deep_fee, sender);
+                let payout = coin::take(&mut balance, settle, ctx);
+                transfer::public_transfer(payout, receiver);
+            };
+        } else {
+            refund_deep(deep_fee, sender);
+        };
+
+        // --- Create SalvageVault for corporate treasury ---
+        let refund_amount = balance::value(&balance);
+        let vault_uid = object::new(ctx);
+        let vault_id = vault_uid.to_inner();
+
+        let salvage_vault = SalvageVault<USDC> {
+            id: vault_uid,
+            original_stream_id: stream_id,
+            owner: sender,
+            balance,
+            pending_hedge_debt: accumulated_hedge_debt,
+            strike_price,
+            hedge_direction,
+            salvaged_at: now,
+        };
+
+        // Transfer the salvage vault to the corporate treasury
+        transfer::transfer(salvage_vault, sender);
+
+        // Update registry with cancellation record
+        peach_registry::record_cancellation(
+            registry,
+            stream_id,
+            settle,
+            refund_amount,
+            now,
+        );
+
+        event::emit(StreamCanceled {
+            stream_id,
+            sender,
+            receiver,
+            receiver_settled_sui: settle,
+            sender_refunded_sui: refund_amount,
+            salvage_vault_id: vault_id,
+            pending_hedge_debt: accumulated_hedge_debt,
+        });
+
+        id.delete();
+    }
+
+    public fun cancel_stream_relative<USDC>(
+        stream: PeachStream<USDC>,
+        base_price_info: &PriceInfoObject,
+        quote_price_info: &PriceInfoObject,
+        deepbook_pool: &mut Pool<SUI, USDC>,
+        deep_fee: Coin<DEEP>,
+        registry: &mut PeachRegistry,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(ctx.sender() == stream.sender, ENotSender);
+
+        let PeachStream {
+            id,
+            sender,
+            receiver,
+            total_amount,
+            withdrawn,
+            mut balance,
+            start_time,
+            end_time,
+            strike_price,
+            hedge_direction,
+            accumulated_hedge_debt,
+            min_lot_size: _,
+            hedge_triggered: _,
+            total_hedged_amount: _,
+        } = stream;
+
+        let stream_id = id.to_inner();
+        let now = clock.timestamp_ms();
+
+        // Calculate earned-but-unclaimed amount
+        let vested = vested_total(total_amount, start_time, end_time, now);
+        let earned = if (vested > withdrawn) { vested - withdrawn } else { 0 };
+        let remaining = balance::value(&balance);
+        let settle = if (earned > remaining) { remaining } else { earned };
+
+        // Settle receiver's earned portion (with hedging if applicable)
+        if (settle > 0) {
+            let spot_price = read_relative_spot_price(base_price_info, quote_price_info, clock);
             if (should_hedge(strike_price, hedge_direction, spot_price)) {
                 event::emit(HedgeTriggered {
                     stream_id,
@@ -700,6 +941,18 @@ module peach_contracts::peach_stream {
     fun read_spot_price(price_info: &PriceInfoObject, clock: &Clock): u64 {
         let price = pyth::get_price_no_older_than(price_info, clock, MAX_PRICE_AGE_SECS);
         normalize_price(&price)
+    }
+
+    /// Read the freshest relative Pyth price (base / quote) and normalize to PRICE_DECIMALS.
+    fun read_relative_spot_price(base_price_info: &PriceInfoObject, quote_price_info: &PriceInfoObject, clock: &Clock): u64 {
+        let base_price = read_spot_price(base_price_info, clock);
+        let quote_price = read_spot_price(quote_price_info, clock);
+        assert!(quote_price > 0, 999); // Safe math: prevent division by zero
+        // Both prices are scaled by PRICE_DECIMALS (10^8)
+        // relative_price = (base_price * 10^8) / quote_price
+        let scaled_base = (base_price as u128) * (pow10((PRICE_DECIMALS as u64)) as u128);
+        let rel_price = scaled_base / (quote_price as u128);
+        (rel_price as u64)
     }
 
     /// Determine if the hedge condition is met based on direction:

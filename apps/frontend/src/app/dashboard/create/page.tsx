@@ -7,25 +7,38 @@ import { useRouter } from "next/navigation";
 import { Shield, ArrowRight, Zap, Lock, Calendar, User, Coins, TrendingDown, TrendingUp } from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 import gsap from "gsap";
+import CustomSelect from "@/components/CustomSelect";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import {
   PEACH_PACKAGE_ID,
   PEACH_REGISTRY_ID,
   USDC_TYPE,
   HEDGE_FLOOR,
-  HEDGE_CEILING,
-  HEDGE_NONE,
+  PYTH_HERMES_BASE_URL,
+  PYTH_SUI_USD_FEED_ID,
 } from "@/lib/constants";
 
 export default function CreateStreamPage() {
   const [amount, setAmount] = useState("10");
   const [recipient, setRecipient] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [hedgeDirection, setHedgeDirection] = useState<number>(HEDGE_FLOOR);
-  const [strikePrice, setStrikePrice] = useState("1.00");
-  const [minLotSize, setMinLotSize] = useState(""); // empty = use default
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [riskDropPct, setRiskDropPct] = useState<number>(15);
   const [isExecuting, setIsExecuting] = useState(false);
   const [txResult, setTxResult] = useState<string | null>(null);
+  const [pythPrices, setPythPrices] = useState<Record<string, number>>({});
+  const [estimatedFee, setEstimatedFee] = useState<number>(0);
+  const [isDangerZone, setIsDangerZone] = useState<boolean>(false);
+  const [targetAsset, setTargetAsset] = useState<string>("SUI/USD");
+
+  const SUPPORTED_ASSETS = [
+    { id: "SUI/USD", name: "SUI/USD (Default)", feedId: PYTH_SUI_USD_FEED_ID },
+    { id: "SUI/XAU", name: "Gold (SUI/XAU)", feedId: "765d2ba906cecc8aca3a2889cb046059e1d8b818610738d82bdcdce1dfbc7692" },
+    { id: "SUI/XAG", name: "Silver (SUI/XAG)", feedId: "4b971a8e10d2deafc809117f7bdc926c80c2f8d8de9632ed70198ca6bf35e165" },
+    { id: "SUI/XCU", name: "Copper (SUI/XCU)", feedId: "636bedafa14a37912993f265eda22431a2be363ad41a10276424bbe1b7f508c4" },
+    { id: "SUI/XPT", name: "Platinum (SUI/XPT)", feedId: "398e4bbc7cbf89d6648c21e08019d878967677753b3096799595c78f805a34e5" },
+  ];
 
   const currentAccount = useCurrentAccount();
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
@@ -55,11 +68,81 @@ export default function CreateStreamPage() {
     return () => ctx.revert();
   }, []);
 
+  // Derived Spot Price
+  const pythSpotPrice = React.useMemo(() => {
+    const suiFeedId = PYTH_SUI_USD_FEED_ID.replace('0x', '');
+    const targetFeedId = SUPPORTED_ASSETS.find(a => a.id === targetAsset)?.feedId?.replace('0x', '') || suiFeedId;
+    
+    if (!pythPrices[suiFeedId]) return null;
+    if (targetFeedId === suiFeedId) return pythPrices[suiFeedId];
+    if (!pythPrices[targetFeedId]) return null;
+    return pythPrices[suiFeedId] / pythPrices[targetFeedId];
+  }, [pythPrices, targetAsset]);
+
+  // Fetch Pyth Prices for all assets
+  useEffect(() => {
+    const fetchPrices = async () => {
+      try {
+        let queryUrl = `${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${PYTH_SUI_USD_FEED_ID}`;
+        SUPPORTED_ASSETS.forEach(a => {
+          if (a.feedId !== PYTH_SUI_USD_FEED_ID) {
+            queryUrl += `&ids[]=${a.feedId}`;
+          }
+        });
+        
+        const res = await fetch(queryUrl);
+        const json = await res.json();
+        
+        const newPrices: Record<string, number> = {};
+        json?.parsed?.forEach((p: any) => {
+          if (p.price) {
+            const priceUsd = parseFloat(p.price.price) * Math.pow(10, p.price.expo);
+            newPrices[p.id] = priceUsd;
+          }
+        });
+        setPythPrices(newPrices);
+      } catch {
+        /* ignore */
+      }
+    };
+    fetchPrices();
+    const interval = setInterval(fetchPrices, 10_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Calculate Estimated Fee
+  useEffect(() => {
+    const val = parseFloat(amount || "0");
+    if (val <= 0 || !pythSpotPrice) {
+      setEstimatedFee(0);
+      setIsDangerZone(false);
+      return;
+    }
+
+    let baseBps = 50;
+    if (val >= 10000) baseBps = 10;
+    else if (val >= 5000) baseBps = 20;
+    else if (val >= 1000) baseBps = 30;
+
+    const derivedStrike = pythSpotPrice * (1 - riskDropPct / 100);
+
+    let riskBps = 0;
+    let danger = false;
+
+    if (pythSpotPrice < derivedStrike * 1.05) { 
+      riskBps = 150; 
+      danger = true; 
+    }
+
+    setEstimatedFee((val * (baseBps + riskBps)) / 10000);
+    setIsDangerZone(danger);
+  }, [amount, riskDropPct, pythSpotPrice]);
+
   const handleCreate = async () => {
     if (!currentAccount || !amount || !recipient || !startDate || !endDate) return;
 
-    const startTimeMs = new Date(startDate).getTime();
-    const endTimeMs = new Date(endDate).getTime();
+    const startTimeMs = startDate.getTime();
+    const endTimeMs = endDate.getTime();
 
     if (startTimeMs < Date.now()) return toast("Start time cannot be in the past.", "error");
     if (endTimeMs <= startTimeMs) return toast("End time must be after start time.", "error");
@@ -71,16 +154,11 @@ export default function CreateStreamPage() {
       const txb = new Transaction();
       const amountInMist = BigInt(Math.floor(parseFloat(amount) * 1_000_000_000));
 
-      // Strike price: 0 if HEDGE_NONE, otherwise user value scaled to 8 decimals
-      const strikePriceScaled =
-        hedgeDirection === HEDGE_NONE
-          ? BigInt(0)
-          : BigInt(Math.floor(parseFloat(strikePrice) * 100_000_000));
+      // Calculate dynamic strike based on risk level
+      const derivedStrike = (pythSpotPrice || 0) * (1 - riskDropPct / 100);
 
-      // Min lot size: 0 means use contract default (0.01 SUI)
-      const minLotMist = minLotSize
-        ? BigInt(Math.floor(parseFloat(minLotSize) * 1_000_000_000))
-        : BigInt(0);
+      const strikePriceScaled = BigInt(Math.floor(derivedStrike * 100_000_000));
+      const minLotMist = BigInt(0); // always use contract default
 
       const [streamCoin] = txb.splitCoins(txb.gas, [amountInMist]);
 
@@ -92,7 +170,7 @@ export default function CreateStreamPage() {
           txb.pure.u64(BigInt(startTimeMs)),
           txb.pure.u64(BigInt(endTimeMs)),
           txb.pure.u64(strikePriceScaled),
-          txb.pure.u8(hedgeDirection),
+          txb.pure.u8(HEDGE_FLOOR), // Always use floor
           txb.pure.u64(minLotMist),
           streamCoin,
           txb.object(PEACH_REGISTRY_ID),
@@ -112,11 +190,65 @@ export default function CreateStreamPage() {
   };
 
   const netAmount = parseFloat(amount || "0");
-  const strikePriceNum = parseFloat(strikePrice || "0");
-  const isProtected = hedgeDirection !== HEDGE_NONE;
+  
+  // Display variables for summary
+  const derivedStrike = (pythSpotPrice || 0) * (1 - riskDropPct / 100);
 
   return (
     <div ref={containerRef} className="relative min-h-[calc(100vh-4rem)] p-4 md:p-8 max-w-6xl mx-auto font-sans">
+      {/* DatePicker Custom Styles for Dark Theme */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .react-datepicker {
+          background-color: #0d0d10 !important;
+          border: 1px solid rgba(255,255,255,0.1) !important;
+          border-radius: 1rem !important;
+          font-family: inherit !important;
+          color: #e8e4df !important;
+        }
+        .react-datepicker__header {
+          background-color: #060608 !important;
+          border-bottom: 1px solid rgba(255,255,255,0.05) !important;
+          border-top-left-radius: 1rem !important;
+          border-top-right-radius: 1rem !important;
+        }
+        .react-datepicker__current-month, .react-datepicker-time__header, .react-datepicker-year-header {
+          color: #e8e4df !important;
+        }
+        .react-datepicker__day {
+          color: #8a8690 !important;
+        }
+        .react-datepicker__day:hover, .react-datepicker__time-name:hover {
+          background-color: rgba(255,255,255,0.1) !important;
+          border-radius: 0.5rem !important;
+        }
+        .react-datepicker__day--selected, .react-datepicker__day--keyboard-selected {
+          background-color: #FF8B5E !important;
+          color: #000 !important;
+          border-radius: 0.5rem !important;
+        }
+        .react-datepicker__time-container {
+          border-left: 1px solid rgba(255,255,255,0.1) !important;
+        }
+        .react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box ul.react-datepicker__time-list li.react-datepicker__time-list-item {
+          color: #8a8690 !important;
+        }
+        .react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box ul.react-datepicker__time-list li.react-datepicker__time-list-item:hover {
+          background-color: rgba(255,255,255,0.1) !important;
+        }
+        .react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box ul.react-datepicker__time-list li.react-datepicker__time-list-item--selected {
+          background-color: #FF8B5E !important;
+          color: #000 !important;
+        }
+        .react-datepicker-popper {
+          z-index: 9999 !important;
+        }
+        .react-datepicker__time-container, .react-datepicker__time {
+          background-color: #0d0d10 !important;
+        }
+        .react-datepicker__triangle {
+          display: none !important;
+        }
+      `}} />
       {/* Header */}
       <div ref={headerRef} className="mb-10 relative z-10">
         <h1 className="text-4xl text-[#e8e4df] font-display font-medium tracking-tight mb-3">
@@ -133,7 +265,7 @@ export default function CreateStreamPage() {
         <div ref={formRef} className="xl:col-span-8 space-y-6">
 
           {/* Stream Config */}
-          <div className="bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-8">
+          <div className="bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-8 relative z-20">
             <h2 className="text-base font-medium text-[#e8e4df] mb-6 flex items-center gap-2">
               <span className="w-1.5 h-5 bg-[#FF8B5E] rounded-full inline-block" />
               Stream Details
@@ -152,6 +284,20 @@ export default function CreateStreamPage() {
                   placeholder="0x..."
                   className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl px-5 py-3.5 text-[#e8e4df] placeholder:text-[#8a8690]/40 focus:outline-none focus:border-[#FF8B5E]/50 focus:ring-1 focus:ring-[#FF8B5E]/30 transition-all duration-300 font-mono text-sm"
                 />
+              </div>
+
+              {/* Asset Pair */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-[#8a8690] flex items-center gap-2 ml-1 uppercase tracking-wider">
+                  <TrendingUp size={12} /> Protection Target
+                </label>
+                <div className="relative z-10">
+                  <CustomSelect
+                    value={targetAsset}
+                    onChange={setTargetAsset}
+                    options={SUPPORTED_ASSETS}
+                  />
+                </div>
               </div>
 
               {/* Amount */}
@@ -180,130 +326,97 @@ export default function CreateStreamPage() {
                   <label className="text-xs font-medium text-[#8a8690] flex items-center gap-2 ml-1 uppercase tracking-wider">
                     <Calendar size={12} /> Start Time
                   </label>
-                  <input
-                    type="datetime-local"
-                    value={startDate}
-                    min={new Date().toISOString().slice(0, 16)}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl px-5 py-3 text-[#e8e4df] focus:outline-none focus:border-[#FF8B5E]/50 transition-all duration-300 [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert text-sm"
+                  <DatePicker
+                    selected={startDate}
+                    onChange={(date: Date | null) => setStartDate(date)}
+                    showTimeSelect
+                    timeFormat="HH:mm"
+                    timeIntervals={15}
+                    dateFormat="MMMM d, yyyy h:mm aa"
+                    minDate={new Date()}
+                    className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl px-5 py-3.5 text-[#e8e4df] focus:outline-none focus:border-[#FF8B5E]/50 focus:ring-1 focus:ring-[#FF8B5E]/30 transition-all duration-300 text-sm"
+                    placeholderText="Select start date & time"
                   />
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-[#8a8690] flex items-center gap-2 ml-1 uppercase tracking-wider">
                     <Calendar size={12} /> End Time
                   </label>
-                  <input
-                    type="datetime-local"
-                    value={endDate}
-                    min={startDate || new Date().toISOString().slice(0, 16)}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl px-5 py-3 text-[#e8e4df] focus:outline-none focus:border-[#FF8B5E]/50 transition-all duration-300 [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert text-sm"
+                  <DatePicker
+                    selected={endDate}
+                    onChange={(date: Date | null) => setEndDate(date)}
+                    showTimeSelect
+                    timeFormat="HH:mm"
+                    timeIntervals={15}
+                    dateFormat="MMMM d, yyyy h:mm aa"
+                    minDate={startDate || new Date()}
+                    className="w-full bg-[#060608]/50 border border-white/[0.08] hover:border-white/[0.15] rounded-2xl px-5 py-3.5 text-[#e8e4df] focus:outline-none focus:border-[#FF8B5E]/50 focus:ring-1 focus:ring-[#FF8B5E]/30 transition-all duration-300 text-sm"
+                    placeholderText="Select end date & time"
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Hedge Direction Selector */}
-          <div className={`bg-[#0d0d10]/60 backdrop-blur-xl rounded-3xl p-8 transition-all duration-500 border ${isProtected ? "border-[#FF8B5E]/20" : "border-white/5"}`}>
+          {/* Risk Level Slider */}
+          <div className="bg-[#0d0d10]/60 backdrop-blur-xl border border-[#FF8B5E]/20 rounded-3xl p-8 relative z-10">
             <h2 className="text-base font-medium text-[#e8e4df] mb-2 flex items-center gap-2">
-              <Shield size={16} className={isProtected ? "text-[#FF8B5E]" : "text-[#8a8690]"} />
-              Protection Mode
+              <Shield size={16} className="text-[#FF8B5E]" />
+              Risk Tolerance
             </h2>
-            <p className="text-[#8a8690] text-xs mb-6 leading-relaxed">
-              Select a hedge direction based on your use case. The contract will automatically
-              swap to USDC via DeepBook V3 when the Pyth oracle price crosses your strike.
+            <p className="text-[#8a8690] text-xs mb-8 leading-relaxed">
+              Slide to adjust your risk profile. We automatically deploy a downside protection "Floor" hedge. 
+              Higher risk means the hedge only activates in extreme market crashes, reducing fees but increasing exposure.
             </p>
 
-            {/* Direction Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-              <button
-                onClick={() => setHedgeDirection(HEDGE_FLOOR)}
-                className={`p-4 rounded-2xl border text-left transition-all duration-300 ${
-                  hedgeDirection === HEDGE_FLOOR
-                    ? "bg-[#FF8B5E]/10 border-[#FF8B5E]/30 ring-1 ring-[#FF8B5E]/20"
-                    : "bg-[#060608]/50 border-white/5 hover:border-white/10"
-                }`}
-              >
-                <TrendingDown size={18} className={hedgeDirection === HEDGE_FLOOR ? "text-[#FF8B5E] mb-2" : "text-[#8a8690] mb-2"} />
-                <div className="text-sm font-medium text-[#e8e4df] mb-1">Floor (Payroll)</div>
-                <div className="text-[10px] text-[#8a8690] leading-relaxed">
-                  Hedge when price drops below strike. Protects employee purchasing power.
-                </div>
-              </button>
-
-              <button
-                onClick={() => setHedgeDirection(HEDGE_CEILING)}
-                className={`p-4 rounded-2xl border text-left transition-all duration-300 ${
-                  hedgeDirection === HEDGE_CEILING
-                    ? "bg-[#FF8B5E]/10 border-[#FF8B5E]/30 ring-1 ring-[#FF8B5E]/20"
-                    : "bg-[#060608]/50 border-white/5 hover:border-white/10"
-                }`}
-              >
-                <TrendingUp size={18} className={hedgeDirection === HEDGE_CEILING ? "text-[#FF8B5E] mb-2" : "text-[#8a8690] mb-2"} />
-                <div className="text-sm font-medium text-[#e8e4df] mb-1">Ceiling (Supply-Chain)</div>
-                <div className="text-[10px] text-[#8a8690] leading-relaxed">
-                  Hedge when price rises above strike. Protects buyer material costs.
-                </div>
-              </button>
-
-              <button
-                onClick={() => setHedgeDirection(HEDGE_NONE)}
-                className={`p-4 rounded-2xl border text-left transition-all duration-300 ${
-                  hedgeDirection === HEDGE_NONE
-                    ? "bg-white/5 border-white/15 ring-1 ring-white/10"
-                    : "bg-[#060608]/50 border-white/5 hover:border-white/10"
-                }`}
-              >
-                <Zap size={18} className={hedgeDirection === HEDGE_NONE ? "text-[#e8e4df] mb-2" : "text-[#8a8690] mb-2"} />
-                <div className="text-sm font-medium text-[#e8e4df] mb-1">None (Raw Stream)</div>
-                <div className="text-[10px] text-[#8a8690] leading-relaxed">
-                  No hedging. Stream raw SUI directly with no oracle protection.
-                </div>
-              </button>
+            <div className="relative mb-8 pt-4">
+              <input 
+                type="range" 
+                min="5" 
+                max="30" 
+                step="0.1"
+                value={riskDropPct}
+                onChange={(e) => setRiskDropPct(parseFloat(e.target.value))}
+                className="w-full h-2 rounded-full appearance-none cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-[#FF8B5E]/30"
+                style={{
+                  background: `linear-gradient(to right, #FF8B5E ${((riskDropPct - 5) / 25) * 100}%, #141418 ${((riskDropPct - 5) / 25) * 100}%)`
+                }}
+              />
+              <style dangerouslySetInnerHTML={{__html: `
+                input[type=range]::-webkit-slider-thumb {
+                  -webkit-appearance: none;
+                  height: 20px;
+                  width: 20px;
+                  border-radius: 50%;
+                  background: #FF8B5E;
+                  cursor: pointer;
+                  box-shadow: 0 0 10px rgba(255,139,94,0.5);
+                  transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+                }
+                input[type=range]::-webkit-slider-thumb:hover {
+                  transform: scale(1.25);
+                  box-shadow: 0 0 15px rgba(255,139,94,0.8);
+                }
+              `}} />
+              <div className="flex justify-between mt-4 text-[10px] font-medium uppercase tracking-wider text-[#8a8690]">
+                <span className={riskDropPct < 10 ? "text-[#FF8B5E] transition-colors" : "transition-colors"}>Low Risk (5%)</span>
+                <span className={riskDropPct >= 10 && riskDropPct < 25 ? "text-[#FF8B5E] transition-colors" : "transition-colors"}>Medium Risk (15%)</span>
+                <span className={riskDropPct >= 25 ? "text-[#FF8B5E] transition-colors" : "transition-colors"}>High Risk (30%)</span>
+              </div>
             </div>
 
-            {/* Strike Price + Min Lot (shown when protected) */}
-            {isProtected && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-white/5">
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-[#8a8690] flex items-center gap-2 ml-1 uppercase tracking-wider">
-                    <Lock size={12} /> Strike Price (USD/SUI)
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8a8690]">$</span>
-                    <input
-                      type="number"
-                      value={strikePrice}
-                      onChange={(e) => setStrikePrice(e.target.value)}
-                      step="0.01"
-                      min="0.01"
-                      className="w-full bg-[#060608]/80 border border-[#FF8B5E]/20 hover:border-[#FF8B5E]/40 rounded-xl pl-8 pr-4 py-3 text-[#e8e4df] focus:outline-none focus:border-[#FF8B5E] transition-all duration-300 font-mono text-sm"
-                    />
-                  </div>
-                  <p className="text-[9px] text-[#8a8690] ml-1">
-                    {hedgeDirection === HEDGE_FLOOR ? "Hedge fires when spot < this price" : "Hedge fires when spot > this price"}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-[#8a8690] flex items-center gap-2 ml-1 uppercase tracking-wider">
-                    Min Lot Size (SUI)
-                  </label>
-                  <input
-                    type="number"
-                    value={minLotSize}
-                    onChange={(e) => setMinLotSize(e.target.value)}
-                    step="0.001"
-                    min="0"
-                    placeholder="0.01 (default)"
-                    className="w-full bg-[#060608]/80 border border-white/[0.08] hover:border-white/[0.15] rounded-xl px-4 py-3 text-[#e8e4df] placeholder:text-[#8a8690]/40 focus:outline-none focus:border-[#FF8B5E]/50 transition-all duration-300 font-mono text-sm"
-                  />
-                  <p className="text-[9px] text-[#8a8690] ml-1">
-                    Sub-lot claims buffer until this threshold. Leave empty for default.
-                  </p>
+            <div className="bg-[#060608]/50 border border-[#FF8B5E]/10 rounded-2xl p-4 flex items-center justify-between">
+              <div>
+                <div className="text-[10px] text-[#8a8690] uppercase tracking-wider mb-1">Auto-Configured Strike Price</div>
+                <div className="text-lg font-mono text-[#e8e4df]">{targetAsset === "SUI/USD" ? "$" : ""}{derivedStrike.toLocaleString(undefined, { maximumFractionDigits: targetAsset === "SUI/USD" ? 4 : 8 })}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] text-[#8a8690] uppercase tracking-wider mb-1">Activation</div>
+                <div className="text-sm font-medium text-[#FF8B5E] font-mono">
+                  Spot drops {riskDropPct.toFixed(1)}%
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
 
@@ -319,29 +432,29 @@ export default function CreateStreamPage() {
 
             <div className="space-y-3 mb-6">
               <SummaryRow label="Escrow Amount" value={`${netAmount.toFixed(3)} SUI`} />
+              <SummaryRow label="Auto-Strike Price" value={pythSpotPrice ? `${targetAsset === "SUI/USD" ? "$" : ""}${derivedStrike.toLocaleString(undefined, { maximumFractionDigits: targetAsset === "SUI/USD" ? 4 : 8 })} ${targetAsset !== "SUI/USD" ? targetAsset : ""}` : "Fetching..."} accent={true} />
               <SummaryRow
-                label="Protection"
-                value={
-                  hedgeDirection === HEDGE_FLOOR ? "Floor (Payroll)" :
-                  hedgeDirection === HEDGE_CEILING ? "Ceiling (Supply)" : "None"
-                }
-                accent={isProtected}
+                label="Minimum Trade Size"
+                value="0.01 SUI"
               />
-              {isProtected && (
-                <>
-                  <SummaryRow label="Strike" value={`$${strikePriceNum.toFixed(2)}`} />
-                  <SummaryRow
-                    label="Direction"
-                    value={hedgeDirection === HEDGE_FLOOR ? "Spot < Strike → Swap" : "Spot > Strike → Swap"}
-                  />
-                </>
-              )}
-              <SummaryRow
-                label="Min Lot"
-                value={minLotSize ? `${parseFloat(minLotSize).toFixed(3)} SUI` : "0.01 SUI (default)"}
-              />
-              <SummaryRow label="Oracle" value={isProtected ? "Pyth Network" : "None"} />
-              <SummaryRow label="DEX" value={isProtected ? "DeepBook V3" : "None"} />
+              <SummaryRow label="Price Oracle" value="Pyth Network" />
+              <SummaryRow label="Liquidity" value="DeepBook V3" />
+              
+              <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
+                <SummaryRow 
+                  label="Protocol Fee (Estimated Max)" 
+                  value={`${estimatedFee.toLocaleString(undefined, { maximumFractionDigits: 4 })} SUI`} 
+                  accent={isDangerZone}
+                />
+                <div className="text-[9px] text-[#8a8690] leading-relaxed px-1">
+                  Base fee tiers: 0.50% (&lt;1k SUI), 0.30% (&lt;5k), 0.20% (&lt;10k), 0.10% (&gt;=10k).
+                  {isDangerZone && (
+                    <span className="text-[#FF8B5E] block mt-1">
+                      ⚠️ Spot price is within 5% of strike. A 1.50% Risk Premium is currently active.
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
 
             <button

@@ -3,14 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
-import AnimatedLogo from "@/components/AnimatedLogo";
+import CustomConnectButton from "@/components/CustomConnectButton";
 
 const navigation = [
   { name: "Overview", href: "/dashboard" },
   { name: "Streams", href: "/dashboard/streams" },
-  { name: "Insurance", href: "/dashboard/insurance" },
-  { name: "Treasury", href: "/dashboard/treasury" },
-  { name: "History", href: "/dashboard/history" },
 ];
 
 export default function DashboardLayout({
@@ -53,16 +50,8 @@ export default function DashboardLayout({
         </nav>
 
         {/* Minimal Premium Profile Section */}
-        <div className="p-6 mt-auto">
-          <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#FF8B5E]/50 to-[#FF8B5E] flex items-center justify-center text-xs font-medium text-surface-0 shadow-inner">
-              AC
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-medium text-white">Acme Corp</span>
-              <span className="text-xs text-text-muted">Production Treasury</span>
-            </div>
-          </div>
+        <div className="p-6 mt-auto flex justify-center w-full">
+          <CustomConnectButton />
         </div>
       </aside>
 
