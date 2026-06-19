@@ -34,10 +34,9 @@ export default function CreateStreamPage() {
 
   const SUPPORTED_ASSETS = [
     { id: "SUI/USD", name: "SUI/USD (Default)", feedId: PYTH_SUI_USD_FEED_ID },
-    { id: "SUI/XAU", name: "Gold (SUI/XAU)", feedId: "765d2ba906cecc8aca3a2889cb046059e1d8b818610738d82bdcdce1dfbc7692" },
-    { id: "SUI/XAG", name: "Silver (SUI/XAG)", feedId: "4b971a8e10d2deafc809117f7bdc926c80c2f8d8de9632ed70198ca6bf35e165" },
-    { id: "SUI/XCU", name: "Copper (SUI/XCU)", feedId: "636bedafa14a37912993f265eda22431a2be363ad41a10276424bbe1b7f508c4" },
-    { id: "SUI/XPT", name: "Platinum (SUI/XPT)", feedId: "398e4bbc7cbf89d6648c21e08019d878967677753b3096799595c78f805a34e5" },
+    { id: "SUI/XAU", name: "Gold (SUI/XAU)", feedId: "30a19158f5a54c0adf8fb7560627343f22a1bc852b89d56be1accdc5dbf96d0e" },
+    { id: "SUI/XAG", name: "Silver (SUI/XAG)", feedId: "321ba4d608fa75ba76d6d73daa715abcbdeb9dba02257f05a1b59178b49f599b" },
+    { id: "SUI/XPT", name: "Platinum (SUI/XPT)", feedId: "70685b5375c3bbb6f4c588f77c128c62f5470415b9f6c3776c1da46ac7225715" },
   ];
 
   const currentAccount = useCurrentAccount();
@@ -83,10 +82,11 @@ export default function CreateStreamPage() {
   useEffect(() => {
     const fetchPrices = async () => {
       try {
-        let queryUrl = `${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${PYTH_SUI_USD_FEED_ID}`;
+        const suiFeedId = PYTH_SUI_USD_FEED_ID.replace("0x", "");
+        let queryUrl = `${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${suiFeedId}`;
         SUPPORTED_ASSETS.forEach(a => {
           if (a.feedId !== PYTH_SUI_USD_FEED_ID) {
-            queryUrl += `&ids[]=${a.feedId}`;
+            queryUrl += `&ids[]=${a.feedId.replace("0x", "")}`;
           }
         });
         

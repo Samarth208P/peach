@@ -16,10 +16,10 @@ interface CustomSelectProps {
 }
 
 const getIconForAsset = (id: string) => {
-  if (id.includes("XAU")) return <img src="/icons/gold_icon.png" alt="Gold" className="w-5 h-5 rounded-[4px]" />;
-  if (id.includes("XAG")) return <img src="/icons/silver_icon.png" alt="Silver" className="w-5 h-5 rounded-[4px]" />;
-  if (id.includes("XCU")) return <img src="/icons/copper_icon.png" alt="Copper" className="w-5 h-5 rounded-[4px]" />;
-  if (id.includes("XPT")) return <img src="/icons/platinum_icon.png" alt="Platinum" className="w-5 h-5 rounded-[4px]" />;
+  if (id.includes("XAU")) return <img src="/icons/gold.svg" alt="Gold" className="w-5 h-5 rounded-[4px]" />;
+  if (id.includes("XAG")) return <img src="/icons/silver.svg" alt="Silver" className="w-5 h-5 rounded-[4px]" />;
+  if (id.includes("XCU")) return <img src="/icons/copper.svg" alt="Copper" className="w-5 h-5 rounded-[4px]" />;
+  if (id.includes("XPT")) return <img src="/icons/platinum.svg" alt="Platinum" className="w-5 h-5 rounded-[4px]" />;
   return <img src="https://cryptologos.cc/logos/sui-sui-logo.svg?v=032" alt="Sui" className="w-5 h-5" />;
 };
 

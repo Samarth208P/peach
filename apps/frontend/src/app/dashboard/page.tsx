@@ -15,7 +15,7 @@ import {
   Wallet,
 } from "lucide-react";
 
-import ProtectionShieldGraph from "@/components/ProtectionShieldGraph";
+
 import { PEACH_PACKAGE_ID, PYTH_HERMES_BASE_URL, PYTH_SUI_USD_FEED_ID } from "@/lib/constants";
 
 interface StreamSummary {
@@ -40,31 +40,38 @@ export default function DashboardPage() {
 
   const [streams, setStreams] = useState<StreamSummary[]>([]);
   const [isHydrating, setIsHydrating] = useState(true);
-  const [pythPrice, setPythPrice] = useState<number | null>(null);
+  const [assetPrices, setAssetPrices] = useState<Record<string, number>>({});
 
+  // Fetch prices once
   useEffect(() => {
-    if (!currentAccount) router.push("/login");
-  }, [currentAccount, router]);
-
-  // Live Pyth SUI/USD price
-  useEffect(() => {
-    const fetchPrice = async () => {
+    const fetchPrices = async () => {
       try {
+        const ids = [
+          "50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266", // SUI
+          "30a19158f5a54c0adf8fb7560627343f22a1bc852b89d56be1accdc5dbf96d0e", // Gold
+          "321ba4d608fa75ba76d6d73daa715abcbdeb9dba02257f05a1b59178b49f599b", // Silver
+          "70685b5375c3bbb6f4c588f77c128c62f5470415b9f6c3776c1da46ac7225715"  // Platinum
+        ];
         const res = await fetch(
-          `${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${PYTH_SUI_USD_FEED_ID}`
+          `${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${ids.join("&ids[]=")}`
         );
         const json = await res.json();
-        const parsed = json?.parsed?.[0]?.price;
-        if (parsed) {
-          setPythPrice(parseFloat(parsed.price) * Math.pow(10, parsed.expo));
+        if (json?.parsed) {
+          const prices: Record<string, number> = {};
+          json.parsed.forEach((p: any) => {
+            const price = parseFloat(p.price.price) * Math.pow(10, p.price.expo);
+            if (p.id === "50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266") prices.SUI = price;
+            if (p.id === "30a19158f5a54c0adf8fb7560627343f22a1bc852b89d56be1accdc5dbf96d0e") prices.XAU = price;
+            if (p.id === "321ba4d608fa75ba76d6d73daa715abcbdeb9dba02257f05a1b59178b49f599b") prices.XAG = price;
+            if (p.id === "70685b5375c3bbb6f4c588f77c128c62f5470415b9f6c3776c1da46ac7225715") prices.XPT = price;
+          });
+          setAssetPrices(prices);
         }
-      } catch {
-        /* keep last */
+      } catch (err) {
+        console.error(err);
       }
     };
-    fetchPrice();
-    const interval = setInterval(fetchPrice, 10_000);
-    return () => clearInterval(interval);
+    fetchPrices();
   }, []);
 
   // Query StreamCreated events
@@ -181,11 +188,6 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="px-3 py-1.5 bg-white/[0.03] border border-white/[0.08] rounded-full text-xs font-mono text-[#8a8690]">
-            {currentAccount
-              ? `${currentAccount.address.slice(0, 6)}...${currentAccount.address.slice(-4)}`
-              : "Not Connected"}
-          </div>
           <Link
             href="/dashboard/create"
             className="flex items-center gap-2 bg-[#FF8B5E] text-black px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#FFB088] transition-colors duration-300"
@@ -201,7 +203,7 @@ export default function DashboardPage() {
           icon={<Wallet size={16} strokeWidth={1.5} />}
           label="Total Volume"
           value={`${totalVolume.toFixed(2)} SUI`}
-          sub={pythPrice ? `$${(totalVolume * pythPrice).toFixed(2)} USD` : undefined}
+          sub={assetPrices.SUI ? `$${(totalVolume * assetPrices.SUI).toFixed(2)} USD` : undefined}
         />
         <MetricCard
           icon={<Activity size={16} strokeWidth={1.5} />}
@@ -224,23 +226,27 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Pyth Price Banner */}
-      <div className="flex items-center gap-4 px-5 py-3 bg-[#0d0d10]/60 border border-white/5 rounded-2xl">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-green-400" />
-          <span className="text-xs text-[#8a8690] uppercase tracking-wider font-medium">Pyth SUI/USD</span>
+      {/* 2-Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left: Prices */}
+        <div className="lg:col-span-1 flex flex-col gap-4">
+          <div className="bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <Zap size={16} className="text-[#8a8690]" />
+              <h2 className="text-sm font-medium text-[#e8e4df] tracking-wide">Market Prices</h2>
+            </div>
+            <div className="flex flex-col gap-5">
+              <PriceRow name="SUI" symbol="SUI/USD" price={assetPrices.SUI} />
+              <PriceRow name="Gold" symbol="XAU/USD" price={assetPrices.XAU} />
+              <PriceRow name="Silver" symbol="XAG/USD" price={assetPrices.XAG} />
+              <PriceRow name="Platinum" symbol="XPT/USD" price={assetPrices.XPT} />
+            </div>
+          </div>
         </div>
-        <span className="text-lg font-mono text-[#e8e4df] font-medium">
-          {pythPrice !== null ? `$${pythPrice.toFixed(4)}` : "Loading..."}
-        </span>
-        <span className="text-xs text-[#8a8690] ml-auto">Refreshes every 10s via Hermes API</span>
-      </div>
 
-      {/* Protection Shield Chart */}
-      <ProtectionShieldGraph />
-
-      {/* Recent Streams */}
-      <div className="bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-6">
+        {/* Right: Streams */}
+        <div className="lg:col-span-2">
+          <div className="bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <Activity size={16} className="text-[#8a8690]" />
@@ -337,6 +343,24 @@ export default function DashboardPage() {
             })}
           </div>
         )}
+      </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Price Row Component ─────────────────────────────────────────────────────
+
+function PriceRow({ name, symbol, price }: { name: string; symbol: string; price?: number }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex flex-col">
+        <span className="text-sm text-[#e8e4df] font-medium">{name}</span>
+        <span className="text-[10px] text-[#8a8690] font-mono">{symbol}</span>
+      </div>
+      <div className="text-sm font-mono text-[#e8e4df]">
+        {price !== undefined ? `$${price.toFixed(4)}` : "..."}
       </div>
     </div>
   );

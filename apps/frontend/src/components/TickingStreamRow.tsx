@@ -62,24 +62,25 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
   const { toast } = useToast();
 
   const preparePythUpdate = async (tx: Transaction) => {
+    const feedId = PYTH_SUI_USD_FEED_ID.replace("0x", "");
     const hermes = new HermesClient(PYTH_HERMES_BASE_URL, {});
-    const priceUpdates = await hermes.getLatestPriceUpdates([PYTH_SUI_USD_FEED_ID]);
+    const priceUpdates = await hermes.getLatestPriceUpdates([feedId]);
     const bufferUpdates = priceUpdates.binary.data.map((hex: string) => Buffer.from(hex, "hex"));
 
     const pythClient = new SuiPythClient(suiClient as any, PYTH_STATE_ID, WORMHOLE_STATE_ID);
 
-    let objectId = await pythClient.getPriceFeedObjectId(PYTH_SUI_USD_FEED_ID);
+    let objectId = await pythClient.getPriceFeedObjectId(feedId);
 
     if (!objectId) {
       const initTx = new Transaction();
       await pythClient.createPriceFeed(initTx as any, bufferUpdates);
       await signAndExecuteTransaction({ transaction: initTx });
       await new Promise((resolve) => setTimeout(resolve, 3000));
-      objectId = await pythClient.getPriceFeedObjectId(PYTH_SUI_USD_FEED_ID);
+      objectId = await pythClient.getPriceFeedObjectId(feedId);
       if (!objectId) throw new Error("Failed to retrieve PriceFeed ObjectId");
     }
 
-    const priceInfoObjectIds = await pythClient.updatePriceFeeds(tx as any, bufferUpdates, [PYTH_SUI_USD_FEED_ID]);
+    const priceInfoObjectIds = await pythClient.updatePriceFeeds(tx as any, bufferUpdates, [feedId]);
     return priceInfoObjectIds[0];
   };
 
@@ -260,8 +261,14 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
   const isProtected = (config.hedgeDirection ?? 2) !== 2;
   const dirLabel = config.hedgeDirection === 0 ? "Floor" : config.hedgeDirection === 1 ? "Ceiling" : "";
 
+  const isCompleted = balance >= config.targetValue;
+
   return (
-    <div className="w-full bg-[#060608] border border-white/5 rounded-2xl p-5 flex flex-col gap-4 hover:bg-[#141418] transition-colors duration-300">
+    <div className={`group w-full border rounded-2xl p-5 flex flex-col gap-4 transition-colors duration-300 ${
+      isCompleted 
+        ? "bg-[#060608]/50 border-white/[0.02] opacity-80" 
+        : "bg-[#060608] border-white/5 hover:bg-[#141418]"
+    }`}>
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-[#0d0d10] border border-white/5 text-[#8a8690]">
@@ -299,25 +306,26 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="w-full h-1.5 bg-[#141418] rounded-full overflow-visible relative mt-1">
-        {/* The animated progress bar */}
-        <div
-          ref={progressBarRef}
-          className="absolute top-0 left-0 h-full rounded-full flex items-center justify-end"
-          // Removed static style={{ width: "0%" }} so React does not override GSAP during re-renders
-        >
-          {/* Flowing background layer */}
-          <div 
-            ref={flowBgRef}
-            className="absolute inset-0 rounded-full"
-            style={{ 
-               background: 'linear-gradient(90deg, rgba(255,139,94,0.4) 0%, #FF8B5E 50%, rgba(255,139,94,0.4) 100%)',
-               backgroundSize: '200% 100%'
-            }}
-          />
+      {/* Progress bar (only shown if not completed) */}
+      {!isCompleted && (
+        <div className="w-full h-1.5 bg-[#141418] group-hover:bg-[#222228] transition-colors duration-300 rounded-full overflow-visible relative mt-1">
+          {/* The animated progress bar */}
+          <div
+            ref={progressBarRef}
+            className="absolute top-0 left-0 h-full rounded-full flex items-center justify-end"
+          >
+            {/* Flowing background layer */}
+            <div 
+              ref={flowBgRef}
+              className="absolute inset-0 rounded-full"
+              style={{ 
+                 background: 'linear-gradient(90deg, rgba(255,139,94,0.4) 0%, #FF8B5E 50%, rgba(255,139,94,0.4) 100%)',
+                 backgroundSize: '200% 100%'
+              }}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Actions & Fee Info */}
       <div className="flex justify-between items-center mt-2">
