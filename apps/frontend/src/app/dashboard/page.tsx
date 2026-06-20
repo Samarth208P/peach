@@ -46,10 +46,9 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchPrices = async () => {
       try {
-        // SUI/USD is the primary feed; other commodities use separate queries
-        const suiFeedId = "23d7315113f5b1d3ba7a83604c44b94d79f4fd69af77f804fc7f920a6dc65744";
+        const feedId = PYTH_SUI_USD_FEED_ID.replace("0x", "");
         const res = await fetch(
-          `${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${suiFeedId}&parsed=true`
+          `${PYTH_HERMES_BASE_URL}/v2/updates/price/latest?ids[]=${feedId}&parsed=true`
         );
         if (!res.ok) return;
         const json = await res.json();
@@ -58,7 +57,7 @@ export default function DashboardPage() {
           json.parsed.forEach((p: any) => {
             if (p?.price) {
               const price = parseFloat(p.price.price) * Math.pow(10, p.price.expo);
-              if (p.id === suiFeedId) prices.SUI = price;
+              if (p.id === feedId) prices.SUI = price;
             }
           });
           setAssetPrices(prices);
@@ -185,14 +184,6 @@ export default function DashboardPage() {
             Self-hedging payment streams — live protocol overview
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard/create"
-            className="flex items-center gap-2 bg-[#FF8B5E] text-black px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#FFB088] transition-colors duration-300"
-          >
-            <Plus size={14} strokeWidth={2.5} /> New Stream
-          </Link>
-        </div>
       </div>
 
       {/* Metrics Strip */}
@@ -290,7 +281,8 @@ export default function DashboardPage() {
               return (
                 <div
                   key={stream.id}
-                  className="flex items-center gap-4 p-4 bg-[#060608] border border-white/5 rounded-2xl hover:bg-[#141418] transition-colors duration-300"
+                  onClick={() => router.push(`/dashboard/streams/${stream.id}`)}
+                  className="flex items-center gap-4 p-4 bg-[#060608] border border-white/5 rounded-2xl hover:bg-[#141418] transition-colors duration-300 cursor-pointer"
                 >
                   {/* Direction indicator */}
                   <div className={`p-2 rounded-xl border ${isInbound ? "bg-green-500/5 border-green-500/10" : "bg-[#0d0d10] border-white/5"}`}>

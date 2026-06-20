@@ -16,9 +16,8 @@ export default function PerformancePage() {
       <Header />
 
       <main className="flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-8 xl:px-16 pt-32 pb-12 flex flex-col md:flex-row gap-8 relative z-10">
-        
         {/* Sidebar Navigation */}
-        <aside className="w-full md:w-64 shrink-0 space-y-1">
+        <aside className="w-full md:w-64 shrink-0 space-y-1 md:sticky md:top-32 md:h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar">
           <div className="text-xs font-semibold text-[#8a8690] uppercase tracking-wider mb-4 ml-3">Performance Data</div>
           
           <NavButton 

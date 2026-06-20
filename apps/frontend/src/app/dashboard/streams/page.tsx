@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import TickingStreamRow from "@/components/TickingStreamRow";
-import { Activity, Clock } from "lucide-react";
+import { Activity, Clock, Plus } from "lucide-react";
 import { useSuiClientQuery, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { PEACH_PACKAGE_ID, PYTH_HERMES_BASE_URL, PYTH_SUI_USD_FEED_ID } from "@/lib/constants";
 
@@ -95,10 +96,13 @@ export default function StreamsPage() {
             else if (fields.receiver === currentAccount.address && fields.sender !== currentAccount.address)
               type = "inbound";
 
+            const targetValue = Number(fields.total_amount) / 1e9;
+            const withdrawn = Number(fields.withdrawn) / 1e9;
+
             active.push({
               id: fields.id.id,
               type,
-              targetValue: Number(fields.total_amount) / 1e9,
+              targetValue,
               durationSeconds: duration,
               elapsedSeconds: elapsed,
               startTimeMs: startTime,
@@ -108,7 +112,7 @@ export default function StreamsPage() {
               strikePrice: Number(fields.strike_price) / 1e8,
               hedgeDirection: Number(fields.hedge_direction),
               hedgeTriggered: fields.hedge_triggered === true,
-              withdrawn: Number(fields.withdrawn) / 1e9,
+              withdrawn,
             });
           }
         });
@@ -122,16 +126,28 @@ export default function StreamsPage() {
   }, [createdEvents, currentAccount, suiClient]);
 
   const isLoading = isEventsLoading || isFetchingObjects;
+  
+  const actuallyActiveCount = activeStreams.filter(s => s.withdrawn < s.targetValue - 0.0001).length;
 
   return (
-    <div className="p-8 max-w-4xl mx-auto font-sans">
-      <div className="mb-10">
-        <h1 className="text-3xl text-[#e8e4df] font-display font-medium tracking-tight mb-2">
-          Active Streams
-        </h1>
-        <p className="text-[#8a8690] text-sm">
-          Real-time payment streams with autonomous hedging via Pyth + DeepBook V3.
-        </p>
+    <div className="flex flex-col gap-8 font-sans w-full">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-2">
+        <div>
+          <h1 className="text-3xl text-[#e8e4df] font-display font-medium tracking-tight mb-2">
+            Active Streams
+          </h1>
+          <p className="text-[#8a8690] text-sm">
+            Real-time payment streams with autonomous hedging via Pyth + DeepBook V3.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard/create"
+            className="flex items-center gap-2 bg-[#FF8B5E] text-black px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#FFB088] transition-colors duration-300"
+          >
+            <Plus size={14} strokeWidth={2.5} /> New Stream
+          </Link>
+        </div>
       </div>
 
       <div className="bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-6">
@@ -145,7 +161,7 @@ export default function StreamsPage() {
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
             <span className="text-[10px] text-[#8a8690] uppercase tracking-widest">
-              {activeStreams.length} active
+              {actuallyActiveCount} active
             </span>
           </div>
         </div>

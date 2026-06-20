@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import CustomConnectButton from "@/components/CustomConnectButton";
+import RainbowBackground from "@/components/RainbowBackground";
 
 const navigation = [
   { name: "Overview", href: "/dashboard" },
@@ -18,13 +19,13 @@ export default function DashboardLayout({
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen flex bg-surface-0 relative overflow-hidden">
-      {/* Background ambient glow for the dashboard */}
-      <div className="absolute top-[-20%] left-[-10%] w-[800px] h-[800px] bg-peach/5 blur-[150px] rounded-full pointer-events-none" />
+    <div className="h-screen w-full flex bg-surface-0 relative overflow-hidden">
+      {/* Rainbow Light Beams Background */}
+      <RainbowBackground />
 
       {/* Sidebar - Glassmorphism */}
       <aside className="w-64 border-r border-white/5 bg-surface-1/40 backdrop-blur-2xl flex flex-col h-screen sticky top-0 z-20">
-        <div className="p-8 flex justify-center w-full">
+        <div className="p-8 flex justify-center w-full shrink-0">
           <Link href="/" className="flex items-center">
             <Image src="/peach_text.svg" alt="Peach" width={110} height={32} className="opacity-90 mt-0.5" />
           </Link>
@@ -50,14 +51,14 @@ export default function DashboardLayout({
         </nav>
 
         {/* Minimal Premium Profile Section */}
-        <div className="p-6 mt-auto flex justify-center w-full">
+        <div className="p-6 mt-auto flex justify-center w-full shrink-0">
           <CustomConnectButton />
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden p-10 relative z-10">
-        <div className="max-w-6xl mx-auto">{children}</div>
+      <main className="flex-1 overflow-y-auto overflow-x-hidden p-6 md:p-10 relative z-10 flex flex-col">
+        <div className="max-w-6xl mx-auto flex-1 w-full flex flex-col min-h-0">{children}</div>
       </main>
     </div>
   );

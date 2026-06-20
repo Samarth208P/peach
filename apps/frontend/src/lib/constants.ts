@@ -49,4 +49,4 @@ export const PRESET_INSTITUTIONAL = 2; // 10 tranches, 18 min intervals (3 hr to
 export const DEFAULT_MIN_LOT_SIZE = BigInt(10_000_000);
 
 // ── Hermes API ───────────────────────────────────────────────────────────────
-export const PYTH_HERMES_BASE_URL = process.env.NEXT_PUBLIC_PYTH_HERMES_URL as string;
+export const PYTH_HERMES_BASE_URL = "https://hermes-beta.pyth.network";

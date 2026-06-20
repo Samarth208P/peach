@@ -8,6 +8,7 @@ import { Buffer } from "buffer";
 import { SuiPythClient } from "@pythnetwork/pyth-sui-js";
 import { HermesClient } from "@pythnetwork/hermes-client";
 import { useToast } from "@/components/ToastProvider";
+import { useRouter } from "next/navigation";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 
@@ -47,7 +48,13 @@ interface StreamConfig {
   suiBalance?: number;
 }
 
-export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config: StreamConfig; pythSpotPrice?: number }) {
+const SuiIcon = ({ size = 16, className = "" }: { size?: number, className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <path fillRule="evenodd" clipRule="evenodd" d="M197.376 71.3347C198.854 69.5551 201.617 69.5551 203.094 71.3347L280.465 164.535L280.715 164.849C294.951 182.255 303.47 204.374 303.471 228.453C303.471 284.533 257.256 329.998 200.24 330C143.223 330 97 284.534 97 228.453C97.001 204.375 105.52 182.255 119.756 164.849L120.006 164.546L197.376 71.3347ZM138.523 178.129C127.606 191.477 121.069 208.448 121.068 226.913C121.068 269.921 156.51 304.789 200.23 304.791C212.695 304.791 224.493 301.954 234.984 296.905L234.996 296.899C235.197 296.798 235.337 296.604 235.369 296.381C236.074 290.481 235.777 283.729 234.151 276.87C230.251 260.431 216.717 245.436 193.471 232.401C166.73 217.454 150.739 198.154 146.261 175.008C146.023 173.777 145.813 172.551 145.647 171.332C145.567 170.744 144.826 170.531 144.447 170.988L138.523 178.129ZM204.156 108.504C202.132 106.065 198.339 106.065 196.314 108.504L184.775 122.412C181.245 126.711 177.091 133.852 174.298 142.374C171.504 150.898 170.051 160.849 171.996 170.756C175.007 186.079 186.483 199.563 206.521 210.763C236.193 227.395 254.216 247.942 259.75 271.895C260.043 273.162 260.296 274.42 260.51 275.665C260.613 276.242 261.346 276.432 261.718 275.98C272.775 262.589 279.402 245.508 279.402 226.913C279.402 208.594 272.965 191.748 262.202 178.449C262.199 178.446 262.2 178.441 262.202 178.438C262.205 178.435 262.206 178.43 262.203 178.427L204.156 108.504Z" fill="currentColor"/>
+  </svg>
+);
+
+export default function TickingStreamRow({ config, pythSpotPrice = 0, disableClick = false }: { config: StreamConfig; pythSpotPrice?: number; disableClick?: boolean }) {
   const [balance, setBalance] = useState(() => {
     const velocity = config.targetValue / config.durationSeconds;
     const now = Date.now();
@@ -61,12 +68,18 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
   const flowBgRef = useRef<HTMLDivElement>(null);
 
   const [hasStarted, setHasStarted] = useState(() => Date.now() >= config.startTimeMs);
+  const [localWithdrawn, setLocalWithdrawn] = useState(config.withdrawn || 0);
+
+  useEffect(() => {
+    setLocalWithdrawn(config.withdrawn || 0);
+  }, [config.withdrawn]);
 
   gsap.registerPlugin(useGSAP);
 
   const suiClient = useSuiClient();
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const { toast } = useToast();
+  const router = useRouter();
 
   const preparePythUpdate = async (tx: Transaction) => {
     const feedId = PYTH_SUI_USD_FEED_ID.replace("0x", "");
@@ -118,6 +131,9 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
       });
 
       await signAndExecuteTransaction({ transaction: tx });
+      
+      setLocalWithdrawn((prev) => prev + unclaimed);
+      
       toast("Stream claimed successfully.", "success");
     } catch (e: any) {
       console.error("Claim Failed", e);
@@ -199,7 +215,7 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
   const [isDangerZone, setIsDangerZone] = useState(false);
   const [willHedge, setWillHedge] = useState(false);
 
-  const unclaimed = Math.max(0, balance - (config.withdrawn || 0));
+  const unclaimed = Math.max(0, balance - localWithdrawn);
 
   useEffect(() => {
     let baseBps = 50;
@@ -241,7 +257,7 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
     const initialPercentage = (elapsedMs / durationTotalMs) * 100;
     
     // Calculate remaining duration
-    const remainingMs = Math.max(0, config.endTimeMs - now);
+    const remainingMs = Math.max(0, config.endTimeMs - Math.max(now, config.startTimeMs));
     const remainingSecs = remainingMs / 1000;
     
     const delayMs = Math.max(0, config.startTimeMs - now);
@@ -268,8 +284,6 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
       ease: "none",
     });
 
-    // 3. Pulsing glow head (REMOVED)
-
   }, [config.startTimeMs, config.endTimeMs]);
 
   const isProtected = (config.hedgeDirection ?? 2) !== 2;
@@ -282,13 +296,17 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
       isCompleted 
         ? "bg-[#060608]/50 border-white/[0.02] opacity-80" 
         : "bg-[#060608] border-white/5 hover:bg-[#141418]"
-    }`}>
+    } ${disableClick ? "" : "cursor-pointer"}`}
+      onClick={() => {
+        if (!disableClick) {
+          router.push(`/dashboard/streams/${config.id}`);
+        }
+      }}
+    >
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-[#0d0d10] border border-white/5 text-[#8a8690]">
-            {config.type === "inbound" ? <ArrowDownLeft size={16} strokeWidth={1.5} /> :
-             config.type === "self" ? <RefreshCw size={16} strokeWidth={1.5} /> :
-             <ArrowUpRight size={16} strokeWidth={1.5} />}
+          <div className={`p-2 rounded-xl border ${config.type === "inbound" ? "bg-blue-500/10 border-blue-500/20 text-blue-400" : config.type === "outbound" ? "bg-[#FF8B5E]/10 border-[#FF8B5E]/20 text-[#FF8B5E]" : "bg-[#0d0d10] border-white/5 text-[#8a8690]"}`}>
+            <SuiIcon size={16} />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -394,14 +412,14 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
           )}
         </div>
         <div className="flex justify-end gap-2 items-center">
-          {(config.withdrawn || 0) > 0 && (
+          {localWithdrawn > 0 && (
              <span className="text-[10px] text-[#8a8690] mr-2">
-               Claimed: {(config.withdrawn || 0).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })} SUI
+               Claimed: {localWithdrawn.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })} SUI
              </span>
           )}
           {(config.type === "inbound" || config.type === "self") && unclaimed > 0.0001 && (
             <button
-              onClick={() => executeClaimTransaction(config.id)}
+              onClick={(e) => { e.stopPropagation(); executeClaimTransaction(config.id); }}
               disabled={isProcessing}
               className="px-4 py-1.5 bg-[#FF8B5E] text-black text-xs font-semibold rounded-lg hover:bg-[#FFB088] transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
@@ -410,7 +428,7 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0 }: { config
           )}
           {(config.type === "outbound" || config.type === "self") && !hasStarted && (
             <button
-              onClick={() => executeCancelTransaction(config.id)}
+              onClick={(e) => { e.stopPropagation(); executeCancelTransaction(config.id); }}
               disabled={isProcessing}
               className="px-4 py-1.5 bg-[#0d0d10] border border-white/5 text-[#e8e4df] text-xs font-medium rounded-lg hover:bg-[#141418] transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
