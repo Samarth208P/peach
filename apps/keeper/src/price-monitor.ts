@@ -23,6 +23,7 @@ export class PriceMonitor {
   private config: KeeperConfig;
   private logger: Logger;
   private latestPrice: PriceData | null = null;
+  private latestVaaPayload: Buffer[] | null = null;
   private pollInterval: NodeJS.Timeout | null = null;
 
   constructor(config: KeeperConfig, logger: Logger) {
@@ -50,6 +51,10 @@ export class PriceMonitor {
 
   getLatestPrice(): PriceData | null {
     return this.latestPrice;
+  }
+
+  getLatestVaaPayload(): Buffer[] | null {
+    return this.latestVaaPayload;
   }
 
   /** Evaluate all streams against current price — return breach detections. */
@@ -134,6 +139,11 @@ export class PriceMonitor {
         publishTime: Number(parsed.price.publish_time),
         confidence,
       };
+
+      const binaryData = data?.binary?.data;
+      if (Array.isArray(binaryData)) {
+        this.latestVaaPayload = binaryData.map((hex: string) => Buffer.from(hex, "hex"));
+      }
     } catch (err) {
       this.logger.error({ err }, "Price fetch error");
     }

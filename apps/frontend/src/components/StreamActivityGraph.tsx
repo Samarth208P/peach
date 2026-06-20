@@ -118,8 +118,6 @@ export default function StreamActivityGraph({ config, currentPrice }: { config: 
                 content={({ active, payload }) => {
                   if (active && payload && payload.length) {
                     const spot = payload.find(p => p.dataKey === 'price')?.value as number;
-                    const upper = payload.find(p => p.dataKey === 'upperBand')?.value as number;
-                    const lower = payload.find(p => p.dataKey === 'lowerBand')?.value as number;
                     const strike = config.strikePrice;
                     
                     return (
@@ -130,20 +128,17 @@ export default function StreamActivityGraph({ config, currentPrice }: { config: 
                         </div>
                         
                         <div className="space-y-1.5 font-mono text-[11px]">
-                          <div className="flex justify-between items-center text-[#8a8690]">
-                            <span>Upper Vol:</span>
-                            <span>${upper?.toFixed(4)}</span>
-                          </div>
-                          
                           <div className="flex justify-between items-center text-white text-[12px] font-bold py-0.5">
                             <span>Spot:</span>
                             <span>${spot?.toFixed(4)}</span>
                           </div>
                           
-                          <div className="flex justify-between items-center text-[#8a8690]">
-                            <span>Lower Vol:</span>
-                            <span>${lower?.toFixed(4)}</span>
-                          </div>
+                          {strike && (
+                            <div className="flex justify-between items-center text-[#8a8690]">
+                              <span>Gap:</span>
+                              <span>{Math.abs(((spot - strike) / spot) * 100).toFixed(2)}%</span>
+                            </div>
+                          )}
                           
                           {strike && (
                             <div className="flex justify-between items-center text-[#FF8B5E] border-t border-white/5 pt-1.5 mt-1.5">

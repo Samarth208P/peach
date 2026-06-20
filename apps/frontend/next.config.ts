@@ -1,4 +1,9 @@
 import type { NextConfig } from "next";
+import { config as dotenvConfig } from "dotenv";
+import path from "path";
+
+// Load environment variables from monorepo root .env (single source of truth)
+dotenvConfig({ path: path.resolve(__dirname, "../../.env") });
 
 const nextConfig: NextConfig = {
   webpack: (config, { webpack, isServer }) => {

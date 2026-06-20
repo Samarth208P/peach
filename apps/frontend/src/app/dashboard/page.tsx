@@ -6,13 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCurrentAccount, useSuiClientQuery, useSuiClient } from "@mysten/dapp-kit";
 import {
   Plus,
-  Activity,
-  Shield,
-  TrendingDown,
-  Zap,
   ArrowRight,
-  Clock,
-  Wallet,
 } from "lucide-react";
 
 
@@ -189,26 +183,22 @@ export default function DashboardPage() {
       {/* Metrics Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
-          icon={<Wallet size={16} strokeWidth={1.5} />}
           label="Total Volume"
           value={`${totalVolume.toFixed(2)} SUI`}
           sub={assetPrices.SUI ? `$${(totalVolume * assetPrices.SUI).toFixed(2)} USD` : undefined}
         />
         <MetricCard
-          icon={<Activity size={16} strokeWidth={1.5} />}
           label="Active Streams"
           value={`${activeCount}`}
           sub={`${outboundCount} out / ${inboundCount} in`}
         />
         <MetricCard
-          icon={<Shield size={16} strokeWidth={1.5} />}
           label="Protected"
           value={`${protectedCount}`}
           sub={totalAccumulatedDebt > 0 ? `${totalAccumulatedDebt.toFixed(4)} SUI buffered` : "All clear"}
           accent={protectedCount > 0}
         />
         <MetricCard
-          icon={<Zap size={16} strokeWidth={1.5} />}
           label="Hedges Fired"
           value={`${hedgeFiredCount}`}
           sub={totalHedgedSui > 0 ? `${totalHedgedSui.toFixed(2)} SUI swapped` : "No hedges yet"}
@@ -221,7 +211,6 @@ export default function DashboardPage() {
         <div className="lg:col-span-1 flex flex-col gap-4">
           <div className="bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-6">
             <div className="flex items-center gap-3 mb-6">
-              <Zap size={16} className="text-[#8a8690]" />
               <h2 className="text-sm font-medium text-[#e8e4df] tracking-wide">Market Prices</h2>
             </div>
             <div className="flex flex-col gap-5">
@@ -231,7 +220,6 @@ export default function DashboardPage() {
             {/* System Status Card to fill space */}
             <div className="mt-8 pt-6 border-t border-white/5">
               <div className="flex items-center gap-3 mb-4">
-                <Shield size={16} className="text-[#8a8690]" />
                 <h2 className="text-sm font-medium text-[#e8e4df] tracking-wide">System Status</h2>
               </div>
               <div className="flex flex-col gap-4">
@@ -266,7 +254,6 @@ export default function DashboardPage() {
           <div className="bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <Activity size={16} className="text-[#8a8690]" />
             <h2 className="text-sm font-medium text-[#e8e4df] tracking-wide">
               Recent Streams
             </h2>
@@ -286,7 +273,6 @@ export default function DashboardPage() {
           </div>
         ) : streams.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 border border-dashed border-white/5 rounded-2xl bg-[#060608]/50">
-            <Clock size={20} className="text-[#8a8690] mb-3 opacity-40" />
             <p className="text-[#e8e4df] text-sm font-medium mb-1">No streams yet</p>
             <p className="text-[#8a8690] text-xs mb-4">
               Deploy your first self-hedging payment stream.
@@ -315,15 +301,6 @@ export default function DashboardPage() {
                   onClick={() => router.push(`/dashboard/streams/${stream.id}`)}
                   className="flex items-center gap-4 p-4 bg-[#060608] border border-white/5 rounded-2xl hover:bg-[#141418] transition-colors duration-300 cursor-pointer"
                 >
-                  {/* Direction indicator */}
-                  <div className={`p-2 rounded-xl border ${isInbound ? "bg-green-500/5 border-green-500/10" : "bg-[#0d0d10] border-white/5"}`}>
-                    {isInbound ? (
-                      <TrendingDown size={16} className="text-green-400" />
-                    ) : (
-                      <Activity size={16} className="text-[#8a8690]" />
-                    )}
-                  </div>
-
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
@@ -387,13 +364,11 @@ function PriceRow({ name, symbol, price }: { name: string; symbol: string; price
 // ─── Metric Card Component ───────────────────────────────────────────────────
 
 function MetricCard({
-  icon,
   label,
   value,
   sub,
   accent,
 }: {
-  icon: React.ReactNode;
   label: string;
   value: string;
   sub?: string;
@@ -402,9 +377,7 @@ function MetricCard({
   return (
     <div className="bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-2xl p-5 hover:bg-[#141418]/60 transition-colors duration-300">
       <div className="flex items-center gap-2 mb-3">
-        <div className={`p-1.5 rounded-lg border ${accent ? "bg-[#FF8B5E]/10 border-[#FF8B5E]/20 text-[#FF8B5E]" : "bg-[#060608] border-white/5 text-[#8a8690]"}`}>
-          {icon}
-        </div>
+        {accent && <div className="w-1.5 h-1.5 rounded-full bg-[#FF8B5E]" />}
         <span className="text-[11px] text-[#8a8690] uppercase tracking-wider font-medium">{label}</span>
       </div>
       <div className="text-2xl font-display font-medium text-[#e8e4df] tracking-tight mb-1">

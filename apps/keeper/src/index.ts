@@ -10,23 +10,36 @@ import { loadConfig } from "./config.js";
 import { Keeper } from "./keeper.js";
 import { startDashboard } from "./dashboard.js";
 
-// Load .env file
+// Load .env from monorepo root (single source of truth)
 import { config as dotenvConfig } from "dotenv";
-dotenvConfig();
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenvConfig({ path: resolve(__dirname, "../../../.env") });
 
 const logger = pino({
   level: process.env.LOG_LEVEL || "info",
   transport: {
-    target: "pino/file",
-    options: { destination: 1 }, // stdout
+    target: "pino-pretty",
+    options: {
+      colorize: true,
+      translateTime: "HH:MM:ss",
+      ignore: "pid,hostname,module",
+      messageFormat: "[{module}] {msg}",
+      colorizeObjects: true,
+      singleLine: false,
+    },
   },
 });
 
 async function main(): Promise<void> {
-  logger.info("═══════════════════════════════════════════════════════");
-  logger.info("  Peach Protocol — Keeper Service v2.0");
-  logger.info("  Autonomous Dual-Asset TWAP Hedge Engine");
-  logger.info("═══════════════════════════════════════════════════════");
+  console.log("");
+  console.log("  =====================================================");
+  console.log("    Peach Protocol -- Keeper Service v2.0");
+  console.log("    Autonomous Dual-Asset TWAP Hedge Engine");
+  console.log("  =====================================================");
+  console.log("");
 
   const config = loadConfig();
   const keeper = new Keeper(config, logger);
@@ -39,7 +52,7 @@ async function main(): Promise<void> {
 
   // Graceful shutdown
   const shutdown = async () => {
-    logger.info("Shutting down...");
+    logger.info({ module: "main" }, "Shutting down...");
     await keeper.stop();
     process.exit(0);
   };
@@ -49,6 +62,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  logger.fatal({ err }, "Keeper service crashed");
+  logger.fatal({ err, module: "main" }, "Keeper service crashed");
   process.exit(1);
 });

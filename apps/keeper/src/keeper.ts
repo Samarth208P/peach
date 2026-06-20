@@ -5,6 +5,7 @@
 
 import { SuiClient } from "@mysten/sui/client";
 import { KeeperConfig } from "./config.js";
+import { ResilientRpcClient } from "./rpc-client.js";
 import { EventIndexer } from "./indexer.js";
 import { PriceMonitor } from "./price-monitor.js";
 import { TransactionBuilder } from "./tx-builder.js";
@@ -16,6 +17,7 @@ const STATE_REFRESH_INTERVAL_MS = 30000;
 
 export class Keeper {
   private client: SuiClient;
+  private rpcClient: ResilientRpcClient;
   private config: KeeperConfig;
   private indexer: EventIndexer;
   private priceMonitor: PriceMonitor;
@@ -25,15 +27,20 @@ export class Keeper {
   private executionLoop: NodeJS.Timeout | null = null;
   private refreshLoop: NodeJS.Timeout | null = null;
   private running = false;
+  private autoClaimInFlight: Set<string> = new Set();
 
   constructor(config: KeeperConfig, logger: Logger) {
     this.config = config;
     this.logger = logger.child({ module: "keeper" });
 
+    // Create resilient RPC client with failover support
+    this.rpcClient = new ResilientRpcClient(config.rpcConfig, logger);
+
+    // Legacy single client for indexer (uses primary endpoint)
     this.client = new SuiClient({ url: config.suiRpcUrl });
     this.indexer = new EventIndexer(this.client, config, logger);
     this.priceMonitor = new PriceMonitor(config, logger);
-    this.txBuilder = new TransactionBuilder(this.client, config, logger);
+    this.txBuilder = new TransactionBuilder(this.rpcClient, config, logger);
 
     this.metrics = {
       startedAt: Date.now(),
@@ -66,7 +73,7 @@ export class Keeper {
     );
 
     if (balance < BigInt(this.config.lowBalanceAlertSui)) {
-      this.logger.warn("Keeper wallet balance is LOW — may run out of gas!");
+      this.logger.warn("Keeper wallet balance is LOW - may run out of gas!");
     }
 
     // Start execution loop
@@ -83,6 +90,7 @@ export class Keeper {
     if (this.executionLoop) clearInterval(this.executionLoop);
     if (this.refreshLoop) clearInterval(this.refreshLoop);
     this.priceMonitor.stop();
+    this.rpcClient.stop();
     await this.indexer.stop();
     this.logger.info("Keeper service stopped");
   }
@@ -108,6 +116,9 @@ export class Keeper {
     if (!this.running) return;
 
     try {
+      const vaaPayload = this.priceMonitor.getLatestVaaPayload();
+      if (!vaaPayload || vaaPayload.length === 0) return;
+
       const breaches = this.priceMonitor.detectBreaches(this.indexer.getStreams());
 
       for (const breach of breaches) {
@@ -118,10 +129,10 @@ export class Keeper {
             price: breach.currentPrice.toString(),
             strike: breach.stream.strikePrice.toString(),
           },
-          "Breach detected — executing hedge"
+          "Breach detected - executing hedge"
         );
 
-        const digest = await this.txBuilder.executeHedge(breach);
+        const digest = await this.txBuilder.executeHedge(breach, vaaPayload);
 
         if (digest) {
           this.metrics.lastExecutionTimestamp = Date.now();
@@ -155,12 +166,16 @@ export class Keeper {
       const maturedStreams = this.indexer.getMaturedStreams();
 
       for (const stream of maturedStreams) {
+        // Skip if already being processed (prevents duplicate attempts across ticks)
+        if (this.autoClaimInFlight.has(stream.streamId)) continue;
+
+        this.autoClaimInFlight.add(stream.streamId);
         this.logger.info(
           { streamId: stream.streamId, receiver: stream.receiver },
-          "Matured stream detected — executing auto-claim"
+          "Matured stream detected - executing auto-claim"
         );
 
-        const digest = await this.txBuilder.executeAutoClaim(stream);
+        const digest = await this.txBuilder.executeAutoClaim(stream, vaaPayload);
 
         if (digest) {
           this.metrics.autoClaimsExecuted++;
@@ -172,6 +187,14 @@ export class Keeper {
           });
         } else {
           this.metrics.rpcErrors++;
+        }
+
+        // Release lock — on success the stream won't appear in getMaturedStreams() anymore
+        // On failure, allow retry on the next refresh cycle (30s) not the next tick (3s)
+        if (!digest) {
+          setTimeout(() => this.autoClaimInFlight.delete(stream.streamId), 30_000);
+        } else {
+          this.autoClaimInFlight.delete(stream.streamId);
         }
       }
     } catch (err) {
@@ -190,7 +213,7 @@ export class Keeper {
       if (balance < BigInt(this.config.lowBalanceAlertSui)) {
         this.logger.warn(
           { balance: balance.toString() },
-          "LOW WALLET BALANCE — keeper may fail"
+          "LOW WALLET BALANCE - keeper may fail"
         );
       }
     } catch (err) {
