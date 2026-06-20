@@ -5,6 +5,9 @@ import { Terminal, ExternalLink, ShieldAlert, CheckCircle2, ArrowRightLeft, Shie
 import { useSuiClientQuery } from '@mysten/dapp-kit';
 import { PEACH_PACKAGE_ID } from "@/lib/constants";
 
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
+
 interface StreamActivityLogsProps {
   config: {
     id: string;
@@ -25,9 +28,15 @@ export default function StreamActivityLogs({ config }: StreamActivityLogsProps) 
     { refetchInterval: 5000 }
   );
 
+  const [now, setNow] = React.useState(Date.now());
+  
+  React.useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const allEvents = useMemo(() => {
     const events: any[] = [];
-    const now = Date.now();
 
     if (data?.data) {
       data.data.forEach(e => {
@@ -66,7 +75,32 @@ export default function StreamActivityLogs({ config }: StreamActivityLogsProps) 
     }
 
     return events.sort((a, b) => b.timestampMs - a.timestampMs);
-  }, [data, config]);
+  }, [data, config, now]);
+
+  const listRef = React.useRef<HTMLDivElement>(null);
+  const previousEventCount = React.useRef(0);
+
+  useGSAP(() => {
+    if (!listRef.current) return;
+    
+    // Only animate newly added elements
+    if (allEvents.length > previousEventCount.current) {
+      const newItemsCount = allEvents.length - previousEventCount.current;
+      
+      // Select the first `newItemsCount` items since the list is sorted descending
+      const newItems = gsap.utils.toArray(listRef.current.children).slice(0, newItemsCount);
+      
+      if (newItems.length > 0) {
+        gsap.fromTo(
+          newItems,
+          { opacity: 0, y: -15 },
+          { opacity: 1, y: 0, duration: 0.4, stagger: 0.1, ease: "power2.out", overwrite: "auto" }
+        );
+      }
+    }
+    
+    previousEventCount.current = allEvents.length;
+  }, [allEvents]);
 
   const renderEventDetails = (type: string, parsedJson: any) => {
     if (type === "SyntheticStreamStarted") {
@@ -156,7 +190,7 @@ export default function StreamActivityLogs({ config }: StreamActivityLogsProps) 
         <h3 className="text-[#e8e4df] font-medium text-sm font-mono tracking-tight uppercase">Activity Logs</h3>
       </div>
       
-      <div className="flex-1 min-h-0 overflow-y-auto pr-2 custom-scrollbar space-y-2">
+      <div className="flex-1 min-h-0 overflow-y-auto pr-2 custom-scrollbar space-y-2" ref={listRef}>
         {isPending ? (
           <div className="flex items-center justify-center py-8 text-[#8a8690] text-sm font-mono animate-pulse">
             Syncing on-chain activity...

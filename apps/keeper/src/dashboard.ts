@@ -1,6 +1,7 @@
 /**
  * Dashboard API — lightweight HTTP endpoints for operational observability.
- * Exposes /health, /metrics, /queue, /streams for monitoring.
+ * Exposes /health, /metrics, /queue, /streams for monitoring,
+ * and POST /register-stream for the frontend to register new streams.
  */
 
 import Fastify from "fastify";
@@ -15,6 +16,18 @@ export async function startDashboard(
   logger: Logger,
 ): Promise<void> {
   const app = Fastify({ logger: false });
+
+  // Enable CORS
+  app.addHook("onRequest", (request, reply, done) => {
+    reply.header("Access-Control-Allow-Origin", "*");
+    reply.header("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+    reply.header("Access-Control-Allow-Headers", "Content-Type");
+    if (request.method === "OPTIONS") {
+      reply.send();
+    } else {
+      done();
+    }
+  });
 
   /** Health check endpoint. */
   app.get("/health", async () => {
@@ -94,6 +107,26 @@ export async function startDashboard(
       usdcBalance: s.usdcBalance.toString(),
     }));
     return { count: streams.length, streams };
+  });
+
+  /** Register a new stream for keeper monitoring. */
+  app.post("/register-stream", async (request, reply) => {
+    const body = request.body as any;
+    const streamId = body?.streamId;
+
+    if (!streamId || typeof streamId !== "string") {
+      return reply.status(400).send({ error: "Missing or invalid 'streamId' in request body" });
+    }
+
+    const indexer = keeper.getIndexer();
+    const success = await indexer.registerStream(streamId);
+
+    if (success) {
+      logger.info({ streamId }, "Stream registered via API");
+      return { status: "registered", streamId };
+    } else {
+      return reply.status(404).send({ error: "Stream not found on-chain", streamId });
+    }
   });
 
   await app.listen({ port: config.dashboardPort, host: "0.0.0.0" });

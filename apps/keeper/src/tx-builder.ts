@@ -8,6 +8,7 @@ import { Transaction } from "@mysten/sui/transactions";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { KeeperConfig } from "./config.js";
 import { BreachDetection } from "./price-monitor.js";
+import { StreamState } from "./types.js";
 import { Logger } from "pino";
 
 const SUI_CLOCK = "0x6";
@@ -70,10 +71,9 @@ export class TransactionBuilder {
   /** Build the PTB and submit it. */
   private async buildAndSubmit(breach: BreachDetection): Promise<string> {
     const tx = new Transaction();
-    tx.setGasBudget(this.config.gasBudget);
 
-    // Fetch fresh Pyth VAA and add update call
-    const vaaBytes = await this.fetchPythVAA();
+    // Fetch fresh Pyth VAA and inject update call
+    const priceInfoObjectId = await this.preparePythUpdate(tx);
 
     // Create DEEP fee coin (zero coin for taker fee)
     const deepCoin = tx.moveCall({
@@ -95,7 +95,7 @@ export class TransactionBuilder {
       arguments: [
         tx.object(this.config.keeperCapObjectId),
         tx.object(breach.stream.streamId),
-        tx.object(this.config.pythPriceInfoObjectId),
+        tx.object(priceInfoObjectId),
         tx.object(this.config.deepbookPoolId),
         deepCoin,
         tx.pure.u64(minOutput),
@@ -116,16 +116,46 @@ export class TransactionBuilder {
     return result.digest;
   }
 
-  /** Fetch the latest Pyth VAA for the SUI/USD price feed. */
-  private async fetchPythVAA(): Promise<string> {
-    const url = `${this.config.pythHermesUrl}/v2/updates/price/latest?ids[]=${this.config.pythSuiUsdFeedId}`;
+  /** Fetch the latest Pyth VAA and append updatePriceFeeds to the PTB. Returns the fresh PriceInfoObjectId. */
+  private async preparePythUpdate(tx: Transaction): Promise<string> {
+    const feedId = this.config.pythSuiUsdFeedId.replace("0x", "");
+    const url = `${this.config.pythHermesUrl}/v2/updates/price/latest?ids[]=${feedId}`;
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Pyth VAA fetch failed: ${response.status}`);
 
     const data = await response.json() as any;
-    const vaa = data?.binary?.data?.[0];
-    if (!vaa) throw new Error("No VAA data in Pyth response");
-    return vaa;
+    const vaaHex = data?.binary?.data?.[0];
+    if (!vaaHex) throw new Error("No VAA data in Pyth response");
+
+    const bufferUpdates = [Buffer.from(vaaHex, "hex")];
+    
+    // Lazy load SuiPythClient to avoid massive cold starts
+    const { SuiPythClient } = await import("@pythnetwork/pyth-sui-js");
+    const pythClient = new SuiPythClient(this.client as any, this.config.pythStateId, this.config.wormholeStateId);
+    
+    const pythFeedIdHex = `0x${feedId}`;
+    let objectId = await pythClient.getPriceFeedObjectId(pythFeedIdHex);
+    
+    if (!objectId) {
+      this.logger.warn("Pyth PriceFeed object not found dynamically. Creating it in a separate transaction...");
+      const createTx = new Transaction();
+      await pythClient.createPriceFeed(createTx as any, bufferUpdates);
+      const res = await this.client.signAndExecuteTransaction({
+        signer: this.keypair,
+        transaction: createTx,
+      });
+      await this.client.waitForTransaction({ digest: res.digest });
+      this.logger.info("Successfully created Pyth PriceFeed object on-chain!");
+      
+      objectId = await pythClient.getPriceFeedObjectId(pythFeedIdHex);
+    }
+    
+    if (!objectId) {
+      throw new Error("Pyth PriceFeed object not found and creation failed. Cannot proceed.");
+    }
+
+    const priceInfoObjectIds = await pythClient.updatePriceFeeds(tx as any, bufferUpdates, [pythFeedIdHex]);
+    return priceInfoObjectIds[0];
   }
 
   /** Calculate minimum output based on current price and slippage tolerance. */
@@ -134,6 +164,76 @@ export class TransactionBuilder {
     // In production, this should be calculated from order book depth.
     // min_output = expected_usdc * (10000 - slippage_bps) / 10000
     return 0;
+  }
+
+  /** Execute an auto-claim for a matured stream with retry logic. */
+  async executeAutoClaim(stream: StreamState): Promise<string | null> {
+    const fs = await import("fs");
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const digest = await this.buildAndSubmitClaim(stream);
+        this.logger.info(
+          { streamId: stream.streamId, digest, attempt },
+          "Auto-claim transaction succeeded"
+        );
+        return digest;
+      } catch (err: any) {
+        this.logger.warn(
+          { streamId: stream.streamId, attempt, err: err.message },
+          "Auto-claim attempt failed"
+        );
+        fs.appendFileSync("keeper-error.log", `[${new Date().toISOString()}] AUTO-CLAIM FAILED: ${err.message}\n${err.stack}\n`);
+        if (attempt < MAX_RETRIES) {
+          await sleep(RETRY_DELAY_MS * attempt);
+        }
+      }
+    }
+    this.logger.error(
+      { streamId: stream.streamId },
+      "Auto-claim: all retry attempts exhausted"
+    );
+    return null;
+  }
+
+  /** Build and submit a claim_stream PTB on behalf of the receiver. */
+  private async buildAndSubmitClaim(stream: StreamState): Promise<string> {
+    const tx = new Transaction();
+
+    // Fetch fresh Pyth VAA and inject update call
+    const priceInfoObjectId = await this.preparePythUpdate(tx);
+
+    // Create DEEP fee coin (zero coin for taker fee — needed by claim_stream's hedge path)
+    const deepCoin = tx.moveCall({
+      target: "0x2::coin::zero",
+      typeArguments: ["0xdeeb7a4662eec9f2f3def03fb937a663dddaa2e215b8078a284d026b7946c270::deep::DEEP"],
+    });
+
+    // Call claim_stream — arguments match the on-chain signature:
+    //   stream, price_info, deepbook_pool, deep_fee, registry, clock
+    tx.moveCall({
+      target: `${this.config.peachPackageId}::peach_stream::claim_stream`,
+      typeArguments: [this.config.usdcType],
+      arguments: [
+        tx.object(stream.streamId),
+        tx.object(priceInfoObjectId),
+        tx.object(this.config.deepbookPoolId),
+        deepCoin,
+        tx.object(this.config.peachRegistryId),
+        tx.object(SUI_CLOCK),
+      ],
+    });
+
+    const result = await this.client.signAndExecuteTransaction({
+      signer: this.keypair,
+      transaction: tx,
+      options: { showEffects: true },
+    });
+
+    if (result.effects?.status?.status !== "success") {
+      throw new Error(`Auto-claim failed: ${result.effects?.status?.error || "unknown"}`);
+    }
+
+    return result.digest;
   }
 
   /** Get keeper wallet SUI balance. */

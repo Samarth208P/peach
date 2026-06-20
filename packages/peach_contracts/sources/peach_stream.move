@@ -39,6 +39,7 @@ module peach_contracts::peach_stream {
     // ============================================================================
 
     /// Caller is not the stream's receiver.
+    #[allow(unused_const)]
     const ENotReceiver: u64 = 1;
     /// Caller is not the stream's sender.
     const ENotSender: u64 = 2;
@@ -564,7 +565,9 @@ module peach_contracts::peach_stream {
         clock: &Clock,
         ctx: &mut TxContext,
     ) {
-        assert!(ctx.sender() == stream.receiver, ENotReceiver);
+        // NOTE: Sender assertion removed to allow the Keeper (or anyone) to
+        // execute claims on behalf of the receiver.  Funds are always
+        // transferred to `stream.receiver`, so this is safe.
 
         let now = clock::timestamp_ms(clock);
         let claimable = newly_vested(stream, now);

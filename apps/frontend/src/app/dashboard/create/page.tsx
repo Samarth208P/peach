@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { useSignAndExecuteTransaction, useCurrentAccount } from "@mysten/dapp-kit";
+import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import { useRouter } from "next/navigation";
 import { Shield, ArrowRight, Zap, Lock, Calendar, User, Coins, TrendingDown } from "lucide-react";
@@ -35,6 +35,7 @@ export default function CreateStreamPage() {
   const [twapPreset, setTwapPreset] = useState<number>(PRESET_CORPORATE);
 
   const currentAccount = useCurrentAccount();
+  const suiClient = useSuiClient();
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const { toast } = useToast();
   const router = useRouter();
@@ -164,10 +165,37 @@ export default function CreateStreamPage() {
         ],
       });
 
-      const result = await signAndExecuteTransaction({ transaction: txb });
+      const result = await signAndExecuteTransaction({ 
+        transaction: txb,
+      });
       setTxResult(result.digest);
+      
+      const txDetails = await suiClient.waitForTransaction({
+        digest: result.digest,
+        options: { showObjectChanges: true }
+      });
+      
+      const newStream = txDetails.objectChanges?.find(
+        (change: any) => change.type === "created" && change.objectType.includes("::peach_stream::PeachStream")
+      );
+      const targetUrl = newStream && "objectId" in newStream ? `/dashboard/streams/${newStream.objectId}` : "/dashboard/streams";
+
+      // Register stream with the Keeper for active monitoring + auto-claim
+      if (newStream && "objectId" in newStream) {
+        try {
+          await fetch(`${process.env.NEXT_PUBLIC_KEEPER_API_URL || "http://localhost:3001"}/register-stream`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ streamId: newStream.objectId }),
+          });
+        } catch {
+          // Non-blocking: keeper registration failure shouldn't prevent UX flow
+          console.warn("Failed to register stream with keeper — it can be registered manually later.");
+        }
+      }
+
       toast("Stream deployed successfully!", "success");
-      setTimeout(() => router.push("/dashboard/streams"), 1500);
+      setTimeout(() => router.push(targetUrl), 1500);
     } catch (e: any) {
       console.error("PTB Execution Failed:", e);
       toast(`Transaction failed: ${e?.message ?? e}`, "error");

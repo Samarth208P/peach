@@ -227,6 +227,37 @@ export default function DashboardPage() {
             <div className="flex flex-col gap-5">
               <PriceRow name="SUI" symbol="SUI/USD" price={assetPrices.SUI} />
             </div>
+            
+            {/* System Status Card to fill space */}
+            <div className="mt-8 pt-6 border-t border-white/5">
+              <div className="flex items-center gap-3 mb-4">
+                <Shield size={16} className="text-[#8a8690]" />
+                <h2 className="text-sm font-medium text-[#e8e4df] tracking-wide">System Status</h2>
+              </div>
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <span className="text-[#8a8690]">Oracle (Pyth)</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-400">Operational</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500/80 animate-pulse" />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <span className="text-[#8a8690]">Keeper Engine</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-400">Monitoring</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500/80 animate-pulse" style={{ animationDelay: '0.5s' }} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <span className="text-[#8a8690]">Sui Network</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-400">~400ms Finality</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500/80 animate-pulse" style={{ animationDelay: '1s' }} />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

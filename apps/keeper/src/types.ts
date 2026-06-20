@@ -33,6 +33,7 @@ export interface KeeperMetrics {
   hedgesTriggered: number;
   tranchesExecuted: number;
   fallbacksExecuted: number;
+  autoClaimsExecuted: number;
   rpcErrors: number;
   lastExecutionTimestamp: number;
   lastPriceUpdateTimestamp: number;

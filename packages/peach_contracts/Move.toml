@@ -21,6 +21,6 @@ Wormhole = { local = "../wormhole_sdk/sui/wormhole" }
 Pyth = { local = "../pyth_sdk/target_chains/sui/contracts" }
 
 [addresses]
-peach_contracts = "0x378066a29972ef1db0cd036a27d8c028cd50daa81868286572e4dd3d16f8730f"
+peach_contracts = "0x6cc1814b41fb9572ca24ec48594413dc439cd03366e7586155eb566a87618eb4"
 pyth            = "0xabf837e98c26087cba0883c0a7a28326b1fa3c5e1e2c5abdb486f9e8f594c837"
 wormhole        = "0xf47329f4344f3bf0f8e436e2f7b485466cff300f12a166563995d3888c296a94"

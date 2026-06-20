@@ -27,7 +27,7 @@ export default function DashboardLayout({
       <aside className="w-64 border-r border-white/5 bg-surface-1/40 backdrop-blur-2xl flex flex-col h-screen sticky top-0 z-20">
         <div className="p-8 flex justify-center w-full shrink-0">
           <Link href="/" className="flex items-center">
-            <Image src="/peach_text.svg" alt="Peach" width={110} height={32} className="opacity-90 mt-0.5" />
+            <Image src="/peach_text.svg" alt="Peach" width={110} height={32} className="opacity-90 mt-0.5" style={{ width: 'auto', height: 'auto' }} />
           </Link>
         </div>
 

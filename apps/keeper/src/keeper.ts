@@ -11,7 +11,7 @@ import { TransactionBuilder } from "./tx-builder.js";
 import { KeeperMetrics, LIQUIDATION_STATUS } from "./types.js";
 import { Logger } from "pino";
 
-const EXECUTION_LOOP_INTERVAL_MS = 3000;
+const EXECUTION_LOOP_INTERVAL_MS = 10000;
 const STATE_REFRESH_INTERVAL_MS = 30000;
 
 export class Keeper {
@@ -41,6 +41,7 @@ export class Keeper {
       hedgesTriggered: 0,
       tranchesExecuted: 0,
       fallbacksExecuted: 0,
+      autoClaimsExecuted: 0,
       rpcErrors: 0,
       lastExecutionTimestamp: 0,
       lastPriceUpdateTimestamp: 0,
@@ -102,7 +103,7 @@ export class Keeper {
     return this.indexer;
   }
 
-  /** Main execution tick — detect breaches and execute hedges. */
+  /** Main execution tick — detect breaches, execute hedges, and auto-claim matured streams. */
   private async tick(): Promise<void> {
     if (!this.running) return;
 
@@ -145,6 +146,30 @@ export class Keeper {
                   : LIQUIDATION_STATUS.TWAP_ACTIVE,
             });
           }
+        } else {
+          this.metrics.rpcErrors++;
+        }
+      }
+
+      // ── Auto-Claim: push funds to receivers for fully-vested streams ──
+      const maturedStreams = this.indexer.getMaturedStreams();
+
+      for (const stream of maturedStreams) {
+        this.logger.info(
+          { streamId: stream.streamId, receiver: stream.receiver },
+          "Matured stream detected — executing auto-claim"
+        );
+
+        const digest = await this.txBuilder.executeAutoClaim(stream);
+
+        if (digest) {
+          this.metrics.autoClaimsExecuted++;
+          this.metrics.lastExecutionTimestamp = Date.now();
+          // Mark balances as zero locally; next refreshAll() will reconcile on-chain state
+          this.indexer.updateStreamState(stream.streamId, {
+            suiBalance: 0n,
+            usdcBalance: 0n,
+          });
         } else {
           this.metrics.rpcErrors++;
         }

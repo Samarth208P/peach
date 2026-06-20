@@ -1,19 +1,25 @@
 /**
- * Event Indexer — subscribes to StreamCreated events and maintains
- * an in-memory registry of all active streams to monitor.
+ * Stream Registry Indexer — maintains an in-memory + persistent registry
+ * of streams that the Keeper is responsible for monitoring.
+ *
+ * Streams are registered via the POST /register-stream API (called by the
+ * frontend after on-chain creation). On-chain state is refreshed periodically.
  */
 
-import { SuiClient, SuiEvent } from "@mysten/sui/client";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { SuiClient } from "@mysten/sui/client";
 import { KeeperConfig } from "./config.js";
 import { StreamState, LIQUIDATION_STATUS } from "./types.js";
 import { Logger } from "pino";
+
+const REGISTRY_FILE = resolve("registered_streams.json");
 
 export class EventIndexer {
   private streams: Map<string, StreamState> = new Map();
   private client: SuiClient;
   private config: KeeperConfig;
   private logger: Logger;
-  private unsubscribe: (() => void) | null = null;
 
   constructor(client: SuiClient, config: KeeperConfig, logger: Logger) {
     this.client = client;
@@ -21,19 +27,51 @@ export class EventIndexer {
     this.logger = logger.child({ module: "indexer" });
   }
 
-  /** Start indexing: load existing streams then subscribe to new events. */
+  /** Start indexing: load persisted stream IDs and refresh their on-chain state. */
   async start(): Promise<void> {
-    await this.loadExistingStreams();
-    await this.subscribeToEvents();
-    this.logger.info({ count: this.streams.size }, "Indexer started");
+    const ids = this.loadRegistry();
+    this.logger.info({ count: ids.length, file: REGISTRY_FILE }, "Loaded stream registry from disk");
+
+    // Populate placeholder entries so refreshAll can hydrate them
+    for (const id of ids) {
+      if (!this.streams.has(id)) {
+        this.streams.set(id, this.emptyStreamState(id));
+      }
+    }
+
+    await this.refreshAll();
+    this.logger.info({ active: this.streams.size }, "Indexer started (registry mode)");
   }
 
-  /** Stop the event subscription. */
+  /** No-op stop — no subscription to tear down. */
   async stop(): Promise<void> {
-    if (this.unsubscribe) {
-      this.unsubscribe();
-      this.unsubscribe = null;
+    // Nothing to clean up in registry mode
+  }
+
+  // ─── Public API ────────────────────────────────────────────────────────────
+
+  /** Register a new stream by ID. Fetches on-chain state and persists to disk. */
+  async registerStream(streamId: string): Promise<boolean> {
+    if (this.streams.has(streamId)) {
+      this.logger.info({ streamId }, "Stream already registered");
+      return true;
     }
+
+    this.streams.set(streamId, this.emptyStreamState(streamId));
+    this.persistRegistry();
+
+    // Hydrate on-chain data
+    await this.refreshStreamsBatch([streamId]);
+
+    // If the object doesn't exist on-chain, remove it
+    if (!this.streams.has(streamId)) {
+      this.logger.warn({ streamId }, "Stream not found on-chain — removed from registry");
+      this.persistRegistry();
+      return false;
+    }
+
+    this.logger.info({ streamId }, "Stream registered successfully");
+    return true;
   }
 
   /** Get all monitored streams. */
@@ -55,6 +93,14 @@ export class EventIndexer {
     );
   }
 
+  /** Get streams that have fully vested (past endTime) but still hold unclaimed balance. */
+  getMaturedStreams(): StreamState[] {
+    const now = Date.now();
+    return [...this.streams.values()].filter(
+      (s) => now >= s.endTime && (s.suiBalance > 0n || s.usdcBalance > 0n)
+    );
+  }
+
   /** Update stream state after a successful hedge/tranche. */
   updateStreamState(streamId: string, updates: Partial<StreamState>): void {
     const stream = this.streams.get(streamId);
@@ -63,127 +109,124 @@ export class EventIndexer {
     }
   }
 
-  /** Remove fully hedged + fully claimed streams. */
+  /** Remove a stream from monitoring. */
   removeStream(streamId: string): void {
     this.streams.delete(streamId);
+    this.persistRegistry();
   }
 
-  /** Query historical StreamCreated events and build initial state. */
-  private async loadExistingStreams(): Promise<void> {
-    const eventType = `${this.config.peachPackageId}::peach_stream::StreamCreated`;
-    let cursor: { txDigest: string; eventSeq: string } | null | undefined = undefined;
-    let hasMore = true;
-
-    while (hasMore) {
-      const response = await this.client.queryEvents({
-        query: { MoveEventType: eventType },
-        order: "ascending",
-        cursor: cursor ?? undefined,
-        limit: 50,
-      });
-
-      for (const event of response.data) {
-        this.processStreamCreated(event);
-      }
-
-      hasMore = response.hasNextPage;
-      cursor = response.nextCursor ?? undefined;
-    }
-
-    // Now refresh on-chain state for each stream
-    for (const [streamId] of this.streams) {
-      await this.refreshStreamOnChain(streamId);
+  /** Public method to refresh all streams (called periodically). */
+  async refreshAll(): Promise<void> {
+    const allIds = Array.from(this.streams.keys());
+    for (let i = 0; i < allIds.length; i += 50) {
+      const chunk = allIds.slice(i, i + 50);
+      await this.refreshStreamsBatch(chunk);
     }
   }
 
-  /** Subscribe to real-time events. */
-  private async subscribeToEvents(): Promise<void> {
-    const eventType = `${this.config.peachPackageId}::peach_stream::StreamCreated`;
+  // ─── Persistence ───────────────────────────────────────────────────────────
+
+  /** Load stream IDs from the persistent JSON file. */
+  private loadRegistry(): string[] {
+    try {
+      if (!existsSync(REGISTRY_FILE)) return [];
+      const raw = readFileSync(REGISTRY_FILE, "utf-8");
+      const data = JSON.parse(raw);
+      if (Array.isArray(data)) return data;
+      return [];
+    } catch (err) {
+      this.logger.warn({ err, file: REGISTRY_FILE }, "Failed to read registry file — starting fresh");
+      return [];
+    }
+  }
+
+  /** Persist the current set of stream IDs to disk. */
+  private persistRegistry(): void {
+    try {
+      const dir = dirname(REGISTRY_FILE);
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      const ids = Array.from(this.streams.keys());
+      writeFileSync(REGISTRY_FILE, JSON.stringify(ids, null, 2), "utf-8");
+    } catch (err) {
+      this.logger.error({ err, file: REGISTRY_FILE }, "Failed to persist registry");
+    }
+  }
+
+  // ─── On-chain Refresh ──────────────────────────────────────────────────────
+
+  /** Refresh multiple streams' on-chain state using multiGetObjects. */
+  private async refreshStreamsBatch(streamIds: string[]): Promise<void> {
+    if (streamIds.length === 0) return;
 
     try {
-      const unsub = await this.client.subscribeEvent({
-        filter: { MoveEventType: eventType },
-        onMessage: (event: SuiEvent) => {
-          this.processStreamCreated(event);
-          this.logger.info({ streamId: (event.parsedJson as any)?.stream_id }, "New stream detected");
-        },
+      const objs = await this.client.multiGetObjects({
+        ids: streamIds,
+        options: { showContent: true },
       });
-      this.unsubscribe = unsub;
+
+      for (const obj of objs) {
+        if (!obj.data?.objectId) continue;
+        const streamId = obj.data.objectId;
+
+        if (!obj.data?.content || obj.data.content.dataType !== "moveObject") {
+          this.streams.delete(streamId);
+          continue;
+        }
+
+        const fields = (obj.data.content as any).fields;
+        if (!fields) continue;
+
+        const stream = this.streams.get(streamId);
+        if (!stream) continue;
+
+        // Hydrate all fields from on-chain data
+        stream.sender = fields.sender || stream.sender;
+        stream.receiver = fields.receiver || stream.receiver;
+        stream.totalAmount = BigInt(fields.total_amount || 0);
+        stream.strikePrice = BigInt(fields.strike_price || 0);
+        stream.hedgeDirection = Number(fields.hedge_direction || 0);
+        stream.startTime = Number(fields.start_time || 0);
+        stream.endTime = Number(fields.end_time || 0);
+        stream.liquidationStatus = Number(fields.liquidation_status || 0);
+        stream.tranchesExecuted = Number(fields.tranches_executed || 0);
+        stream.lastTrancheTimestamp = Number(fields.last_tranche_timestamp || 0);
+        stream.twapTranches = Number(fields.twap_tranches || 5);
+        stream.twapIntervalMs = Number(fields.twap_interval_ms || 720_000);
+        stream.totalSuiAtHedgeStart = BigInt(fields.total_sui_at_hedge_start || 0);
+        stream.suiBalance = BigInt(fields.balance || 0);
+        stream.usdcBalance = BigInt(fields.usdc_balance || 0);
+
+        // Remove fully claimed streams (no balance left)
+        if (stream.suiBalance === 0n && stream.usdcBalance === 0n) {
+          this.streams.delete(streamId);
+        }
+      }
     } catch (err) {
-      this.logger.warn({ err }, "Event subscription failed — falling back to polling");
+      this.logger.error({ err }, "Failed to refresh stream state batch");
     }
   }
 
-  /** Parse a StreamCreated event into our state map. */
-  private processStreamCreated(event: SuiEvent): void {
-    const data = event.parsedJson as any;
-    if (!data?.stream_id) return;
+  // ─── Helpers ───────────────────────────────────────────────────────────────
 
-    const streamId = data.stream_id;
-    if (this.streams.has(streamId)) return;
-
-    this.streams.set(streamId, {
+  /** Create an empty placeholder StreamState for a given ID. */
+  private emptyStreamState(streamId: string): StreamState {
+    return {
       streamId,
-      sender: data.sender || "",
-      receiver: data.receiver || "",
-      totalAmount: BigInt(data.total_amount || 0),
-      strikePrice: BigInt(data.strike_price || 0),
-      hedgeDirection: Number(data.hedge_direction || 0),
-      startTime: Number(data.start_time || 0),
-      endTime: Number(data.end_time || 0),
-      twapTranches: 5, // default, will be refreshed
+      sender: "",
+      receiver: "",
+      totalAmount: 0n,
+      strikePrice: 0n,
+      hedgeDirection: 0,
+      startTime: 0,
+      endTime: 0,
+      twapTranches: 5,
       twapIntervalMs: 720_000,
       liquidationStatus: LIQUIDATION_STATUS.HEALTHY,
       tranchesExecuted: 0,
       lastTrancheTimestamp: 0,
       totalSuiAtHedgeStart: 0n,
-      suiBalance: BigInt(data.total_amount || 0),
+      suiBalance: 0n,
       usdcBalance: 0n,
-    });
-  }
-
-  /** Refresh a stream's on-chain state by reading the shared object. */
-  private async refreshStreamOnChain(streamId: string): Promise<void> {
-    try {
-      const obj = await this.client.getObject({
-        id: streamId,
-        options: { showContent: true },
-      });
-
-      if (!obj.data?.content || obj.data.content.dataType !== "moveObject") {
-        this.streams.delete(streamId);
-        return;
-      }
-
-      const fields = (obj.data.content as any).fields;
-      if (!fields) return;
-
-      const stream = this.streams.get(streamId);
-      if (!stream) return;
-
-      stream.liquidationStatus = Number(fields.liquidation_status || 0);
-      stream.tranchesExecuted = Number(fields.tranches_executed || 0);
-      stream.lastTrancheTimestamp = Number(fields.last_tranche_timestamp || 0);
-      stream.twapTranches = Number(fields.twap_tranches || 5);
-      stream.twapIntervalMs = Number(fields.twap_interval_ms || 720_000);
-      stream.totalSuiAtHedgeStart = BigInt(fields.total_sui_at_hedge_start || 0);
-      stream.suiBalance = BigInt(fields.balance || 0);
-      stream.usdcBalance = BigInt(fields.usdc_balance || 0);
-
-      // Remove fully hedged + fully claimed streams
-      if (stream.liquidationStatus === LIQUIDATION_STATUS.FULLY_HEDGED &&
-          stream.suiBalance === 0n && stream.usdcBalance === 0n) {
-        this.streams.delete(streamId);
-      }
-    } catch (err) {
-      this.logger.error({ err, streamId }, "Failed to refresh stream state");
-    }
-  }
-
-  /** Public method to refresh all streams (called periodically). */
-  async refreshAll(): Promise<void> {
-    for (const [streamId] of this.streams) {
-      await this.refreshStreamOnChain(streamId);
-    }
+    };
   }
 }

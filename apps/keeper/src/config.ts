@@ -8,6 +8,7 @@ export interface KeeperConfig {
   keeperPrivateKey: string;
   peachPackageId: string;
   keeperCapObjectId: string;
+  peachRegistryId: string;
   deepbookPoolId: string;
   pythHermesUrl: string;
   pythSuiUsdFeedId: string;
@@ -38,6 +39,7 @@ export function loadConfig(): KeeperConfig {
     keeperPrivateKey: required("KEEPER_PRIVATE_KEY"),
     peachPackageId: required("PEACH_PACKAGE_ID"),
     keeperCapObjectId: required("KEEPER_CAP_OBJECT_ID"),
+    peachRegistryId: required("PEACH_REGISTRY_ID"),
     deepbookPoolId: required("DEEPBOOK_SUI_USDC_POOL_ID"),
     pythHermesUrl: optional("PYTH_HERMES_URL", "https://hermes.pyth.network"),
     pythSuiUsdFeedId: required("PYTH_SUI_USD_FEED_ID"),
@@ -48,7 +50,7 @@ export function loadConfig(): KeeperConfig {
     pricePollIntervalMs: parseInt(optional("PRICE_POLL_INTERVAL_MS", "5000")),
     minOutputGuardSlippageBps: parseInt(optional("MIN_OUTPUT_GUARD_SLIPPAGE_BPS", "50")),
     gasBudget: parseInt(optional("GAS_BUDGET", "100000000")),
-    lowBalanceAlertSui: parseInt(optional("LOW_BALANCE_ALERT_SUI", "5000000000")),
+    lowBalanceAlertSui: parseInt(optional("LOW_BALANCE_ALERT_SUI", "1000000000")),
     dashboardPort: parseInt(optional("DASHBOARD_PORT", "3001")),
   };
 }

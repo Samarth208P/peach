@@ -199,10 +199,16 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0, disableCli
       const currentBalance = elapsed * velocity;
       setBalance(currentBalance);
 
+      if (progressBarRef.current) {
+        const percentage = config.targetValue > 0 ? (currentBalance / config.targetValue) * 100 : 0;
+        progressBarRef.current.style.width = `${percentage}%`;
+      }
+
       if (currentNow < config.endTimeMs) {
         animationFrameId = requestAnimationFrame(tick);
       } else {
         setBalance(config.targetValue);
+        if (progressBarRef.current) progressBarRef.current.style.width = "100%";
       }
     };
 
@@ -247,34 +253,6 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0, disableCli
 
   useGSAP(() => {
     if (!progressBarRef.current || !flowBgRef.current) return;
-
-    const now = Date.now();
-    const durationTotalMs = config.endTimeMs - config.startTimeMs;
-    const durationTotalSecs = durationTotalMs / 1000;
-    
-    // Calculate initial percentage
-    const elapsedMs = Math.max(0, Math.min(now - config.startTimeMs, durationTotalMs));
-    const initialPercentage = (elapsedMs / durationTotalMs) * 100;
-    
-    // Calculate remaining duration
-    const remainingMs = Math.max(0, config.endTimeMs - Math.max(now, config.startTimeMs));
-    const remainingSecs = remainingMs / 1000;
-    
-    const delayMs = Math.max(0, config.startTimeMs - now);
-    const delaySecs = delayMs / 1000;
-
-    // 1. Animate width smoothly
-    if (remainingSecs > 0) {
-      gsap.set(progressBarRef.current, { width: `${initialPercentage}%` });
-      gsap.to(progressBarRef.current, {
-        width: "100%",
-        duration: remainingSecs,
-        delay: delaySecs,
-        ease: "none",
-      });
-    } else {
-      gsap.set(progressBarRef.current, { width: "100%" });
-    }
 
     // 2. Flowing gradient background effect
     gsap.to(flowBgRef.current, {
@@ -332,8 +310,9 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0, disableCli
                 </span>
               )}
             </div>
-            <div className="text-[10px] text-[#8a8690] font-mono mt-1">
-              {config.sender.slice(0, 6)}...{config.sender.slice(-4)} → {config.receiver.slice(0, 6)}...{config.receiver.slice(-4)}
+            <div className="text-[10px] text-[#8a8690] font-mono mt-1 flex flex-col gap-0.5">
+              <span>{config.sender.slice(0, 6)}...{config.sender.slice(-4)} → {config.receiver.slice(0, 6)}...{config.receiver.slice(-4)}</span>
+              <span>{isCompleted ? "Ended: " : hasStarted ? "Started: " : "Starts: "} {new Date(isCompleted ? config.endTimeMs : config.startTimeMs).toLocaleString()}</span>
             </div>
           </div>
         </div>
