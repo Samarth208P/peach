@@ -1,0 +1,17 @@
+# Netlify Configuration for Peach Protocol Monorepo
+# Since this is a monorepo, Netlify will run from the root, building the Next.js frontend workspace.
+
+[build]
+  # Build from the root directory to leverage root dependencies and workspace commands
+  base = ""
+  
+  # The path to the build output directory for Next.js
+  publish = "apps/frontend/.next"
+  
+  # Command to compile and bundle the Next.js frontend
+  command = "npm run build --workspace=apps/frontend"
+
+[build.environment]
+  # Force Node.js 22 to match the engines configuration in the package.json files
+  NODE_VERSION = "22"
+  NPM_FLAGS = "--legacy-peer-deps"
