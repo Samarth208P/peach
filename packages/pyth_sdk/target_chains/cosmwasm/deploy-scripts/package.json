@@ -1,0 +1,24 @@
+{
+  "name": "@pythnetwork/cosmwasm-deploy-scripts",
+  "version": "1.0.0",
+  "description": "",
+  "private": "true",
+  "scripts": {
+    "build": "tsc",
+    "build-contract": "ts-node ./src/build-contract.ts",
+    "instantiate-wormhole": "ts-node ./src/instantiate-wormhole.ts",
+    "instantiate-pyth": "ts-node ./src/instantiate-pyth.ts"
+  },
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@pythnetwork/cosmwasm-deploy-tools": "*",
+    "@pythnetwork/contract-manager": "*",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.3.3",
+    "yargs": "^17.0.1"
+  },
+  "devDependencies": {
+    "@types/yargs": "^17.0.18"
+  }
+}
