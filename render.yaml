@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: peach-keeper
+    env: node
+    buildCommand: npm install && npm run build --workspace=@peach/keeper
+    startCommand: npm run start:keeper
+    envVars:
+      # SUI Configuration
+      - key: SUI_RPC_URL
+        sync: false
+      - key: SUI_RPC_ENDPOINTS
+        sync: false
+      # Keeper Configuration
+      - key: KEEPER_PRIVATE_KEY
+        sync: false
+      # Peach Contracts
+      - key: PEACH_PACKAGE_ID
+        sync: false
+      - key: KEEPER_CAP_OBJECT_ID
+        sync: false
+      - key: PEACH_REGISTRY_ID
+        sync: false
+      # DeepBook
+      - key: DEEPBOOK_SUI_USDC_POOL_ID
+        sync: false
+      - key: USDC_TYPE
+        sync: false
+      # Pyth Oracle
+      - key: PYTH_SUI_USD_FEED_ID
+        sync: false
+      - key: PYTH_PRICE_INFO_OBJECT_ID
+        sync: false
+      - key: PYTH_STATE_ID
+        sync: false
+      # Wormhole
+      - key: WORMHOLE_STATE_ID
+        sync: false

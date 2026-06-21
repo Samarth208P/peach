@@ -90,6 +90,6 @@ export function loadConfig(): KeeperConfig {
     minOutputGuardSlippageBps: parseInt(optional("MIN_OUTPUT_GUARD_SLIPPAGE_BPS", "50")),
     gasBudget: parseInt(optional("GAS_BUDGET", "100000000")),
     lowBalanceAlertSui: parseInt(optional("LOW_BALANCE_ALERT_SUI", "1000000000")),
-    dashboardPort: parseInt(optional("DASHBOARD_PORT", "3001")),
+    dashboardPort: parseInt(optional("DASHBOARD_PORT", process.env.PORT || "3001")),
   };
 }
