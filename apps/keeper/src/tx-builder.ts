@@ -122,6 +122,7 @@ export class TransactionBuilder {
     const { bytes, signature } = await this.rpc.execute(
       async (client) => {
         const tx = new Transaction();
+        tx.setSender(this.getAddress());
         tx.setGasBudget(this.config.gasBudget);
 
         // Let the build function add move calls to the transaction
@@ -249,6 +250,7 @@ export class TransactionBuilder {
 
       // Create the price feed in a separate transaction
       const createTx = new Transaction();
+      createTx.setSender(this.getAddress());
       createTx.setGasBudget(this.config.gasBudget);
       await pythClient.createPriceFeed(createTx as any, bufferUpdates);
 
