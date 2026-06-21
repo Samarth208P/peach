@@ -22,6 +22,7 @@ export default function StreamDetailsPage() {
 
   // Fetch Pyth Price
   useEffect(() => {
+    if (!PYTH_SUI_USD_FEED_ID) return;
     const fetchPrice = async () => {
       try {
         const feedId = PYTH_SUI_USD_FEED_ID.replace("0x", "");

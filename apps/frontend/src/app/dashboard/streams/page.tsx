@@ -31,6 +31,7 @@ export default function StreamsPage() {
   const [pythSpotPrice, setPythSpotPrice] = useState<number | null>(null);
 
   useEffect(() => {
+    if (!PYTH_SUI_USD_FEED_ID) return;
     const fetchPrice = async () => {
       try {
         const res = await fetch(

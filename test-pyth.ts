@@ -8,8 +8,8 @@ async function main() {
   
   const pythClient = new SuiPythClient(client, pythStateId, wormholeStateId);
   
-  const feedIdNo0x = "23d7315113f5b1d3ba7a83604c44b94d79f4fd69af77f804fc7f920a6dc65744";
-  const feedIdWith0x = "0x23d7315113f5b1d3ba7a83604c44b94d79f4fd69af77f804fc7f920a6dc65744";
+  const feedIdNo0x = "50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266";
+  const feedIdWith0x = "0x50c67b3fd225db8912a424dd4baed60ffdde625ed2feaaf283724f9608fea266";
   
   console.log("Without 0x:", await pythClient.getPriceFeedObjectId(feedIdNo0x));
   console.log("With 0x:", await pythClient.getPriceFeedObjectId(feedIdWith0x));

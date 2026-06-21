@@ -38,6 +38,7 @@ export default function DashboardPage() {
 
   // Fetch prices once
   useEffect(() => {
+    if (!PYTH_SUI_USD_FEED_ID) return;
     const fetchPrices = async () => {
       try {
         const feedId = PYTH_SUI_USD_FEED_ID.replace("0x", "");

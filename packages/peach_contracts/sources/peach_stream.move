@@ -598,14 +598,16 @@ module peach_contracts::peach_stream {
         } else if (stream.liquidation_status == STATUS_FULLY_HEDGED) {
             // --- FULLY HEDGED: Pure USDC payout ---
             refund_deep(deep_fee, sender);
-            let usdc_share = compute_usdc_share(stream, net_claimable);
+            let total_remaining = stream.total_amount - stream.withdrawn + claimable;
+            let usdc_share = compute_usdc_share(stream, net_claimable, total_remaining);
             let usdc_payout = coin::take(&mut stream.usdc_balance, usdc_share, ctx);
             transfer::public_transfer(usdc_payout, receiver);
             (0, usdc_share)
         } else {
             // --- TWAP_ACTIVE: Mixed proportional payout ---
             refund_deep(deep_fee, sender);
-            let (sui_share, usdc_share) = compute_mixed_shares(stream, net_claimable);
+            let total_remaining = stream.total_amount - stream.withdrawn + claimable;
+            let (sui_share, usdc_share) = compute_mixed_shares(stream, net_claimable, total_remaining);
             if (sui_share > 0) {
                 let sui_payout = coin::take(&mut stream.balance, sui_share, ctx);
                 transfer::public_transfer(sui_payout, receiver);
@@ -700,15 +702,17 @@ module peach_contracts::peach_stream {
             } else {
                 // Hedged state: pay proportionally from both pools
                 refund_deep(deep_fee, sender);
-                let baseline = if (total_sui_at_hedge_start > 0) {
-                    total_sui_at_hedge_start
-                } else { total_amount };
+                let total_remaining = total_amount - withdrawn;
 
                 let sui_remaining = balance::value(&balance);
                 let usdc_pool = balance::value(&usdc_balance);
 
-                let sui_share = (((earned as u128) * (sui_remaining as u128)) / (baseline as u128) as u64);
-                let usdc_share = (((earned as u128) * (usdc_pool as u128)) / (baseline as u128) as u64);
+                let sui_share = if (total_remaining > 0) {
+                    (((earned as u128) * (sui_remaining as u128)) / (total_remaining as u128) as u64)
+                } else { 0 };
+                let usdc_share = if (total_remaining > 0) {
+                    (((earned as u128) * (usdc_pool as u128)) / (total_remaining as u128) as u64)
+                } else { 0 };
 
                 if (sui_share > 0 && sui_share <= balance::value(&balance)) {
                     let p = coin::take(&mut balance, sui_share, ctx);
@@ -1030,28 +1034,26 @@ module peach_contracts::peach_stream {
     }
 
     /// Compute proportional USDC share for FULLY_HEDGED state.
-    /// Formula: (claimable_units * usdc_pool) / total_sui_at_hedge_start
-    fun compute_usdc_share<USDC>(stream: &PeachStream<USDC>, claimable: u64): u64 {
+    /// Formula: (claimable_units * usdc_pool) / total_remaining
+    fun compute_usdc_share<USDC>(stream: &PeachStream<USDC>, claimable: u64, total_remaining: u64): u64 {
         let usdc_pool = balance::value(&stream.usdc_balance);
-        let baseline = stream.total_sui_at_hedge_start;
-        if (baseline == 0 || usdc_pool == 0) return 0;
-        let share = ((claimable as u128) * (usdc_pool as u128)) / (baseline as u128);
+        if (total_remaining == 0 || usdc_pool == 0) return 0;
+        let share = ((claimable as u128) * (usdc_pool as u128)) / (total_remaining as u128);
         let result = (share as u64);
         // Clamp to available balance
         if (result > usdc_pool) { usdc_pool } else { result }
     }
 
     /// Compute proportional mixed shares for TWAP_ACTIVE state.
-    /// Both SUI and USDC are distributed relative to total_sui_at_hedge_start.
-    fun compute_mixed_shares<USDC>(stream: &PeachStream<USDC>, claimable: u64): (u64, u64) {
-        let baseline = stream.total_sui_at_hedge_start;
-        if (baseline == 0) return (claimable, 0);
+    /// Both SUI and USDC are distributed relative to total_remaining.
+    fun compute_mixed_shares<USDC>(stream: &PeachStream<USDC>, claimable: u64, total_remaining: u64): (u64, u64) {
+        if (total_remaining == 0) return (claimable, 0);
 
         let sui_remaining = balance::value(&stream.balance);
         let usdc_pool = balance::value(&stream.usdc_balance);
 
-        let sui_share = ((claimable as u128) * (sui_remaining as u128)) / (baseline as u128);
-        let usdc_share = ((claimable as u128) * (usdc_pool as u128)) / (baseline as u128);
+        let sui_share = ((claimable as u128) * (sui_remaining as u128)) / (total_remaining as u128);
+        let usdc_share = ((claimable as u128) * (usdc_pool as u128)) / (total_remaining as u128);
 
         let sui_result = (sui_share as u64);
         let usdc_result = (usdc_share as u64);

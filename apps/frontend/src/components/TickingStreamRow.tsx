@@ -82,6 +82,7 @@ export default function TickingStreamRow({ config, pythSpotPrice = 0, disableCli
   const router = useRouter();
 
   const preparePythUpdate = async (tx: Transaction) => {
+    if (!PYTH_SUI_USD_FEED_ID) throw new Error("PYTH_SUI_USD_FEED_ID is not configured");
     const feedId = PYTH_SUI_USD_FEED_ID.replace("0x", "");
     const hermes = new HermesClient(PYTH_HERMES_BASE_URL, {});
     const priceUpdates = await hermes.getLatestPriceUpdates([feedId]);

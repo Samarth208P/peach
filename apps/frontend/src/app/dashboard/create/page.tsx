@@ -65,12 +65,14 @@ export default function CreateStreamPage() {
 
   // Derived Spot Price (SUI/USD only)
   const pythSpotPrice = React.useMemo(() => {
+    if (!PYTH_SUI_USD_FEED_ID) return null;
     const suiFeedId = PYTH_SUI_USD_FEED_ID.replace('0x', '');
     return pythPrices[suiFeedId] || null;
   }, [pythPrices]);
 
   // Fetch SUI/USD price from Pyth
   useEffect(() => {
+    if (!PYTH_SUI_USD_FEED_ID) return;
     const fetchPrices = async () => {
       try {
         const suiFeedId = PYTH_SUI_USD_FEED_ID.replace("0x", "");
