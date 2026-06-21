@@ -39,8 +39,16 @@ export class EventIndexer {
       }
     }
 
+    // Discover any missed streams from chain events before initial refresh
+    const eventIds = await this.discoverStreamsFromEvents();
+    for (const id of eventIds) {
+      if (!this.streams.has(id)) {
+        this.streams.set(id, this.emptyStreamState(id));
+      }
+    }
+
     await this.refreshAll();
-    this.logger.info({ active: this.streams.size }, "Indexer started (registry mode)");
+    this.logger.info({ active: this.streams.size }, "Indexer started (registry mode + events)");
   }
 
   /** No-op stop — no subscription to tear down. */
@@ -117,11 +125,22 @@ export class EventIndexer {
 
   /** Public method to refresh all streams (called periodically). */
   async refreshAll(): Promise<void> {
+    // Also discover new streams periodically
+    const eventIds = await this.discoverStreamsFromEvents();
+    for (const id of eventIds) {
+      if (!this.streams.has(id)) {
+        this.streams.set(id, this.emptyStreamState(id));
+      }
+    }
+
     const allIds = Array.from(this.streams.keys());
     for (let i = 0; i < allIds.length; i += 50) {
       const chunk = allIds.slice(i, i + 50);
       await this.refreshStreamsBatch(chunk);
     }
+    
+    // Persist registry to capture newly discovered streams
+    this.persistRegistry();
   }
 
   // ─── Persistence ───────────────────────────────────────────────────────────
@@ -228,5 +247,32 @@ export class EventIndexer {
       suiBalance: 0n,
       usdcBalance: 0n,
     };
+  }
+
+  /** Discover all streams created by querying on-chain events. */
+  private async discoverStreamsFromEvents(): Promise<string[]> {
+    const streamIds = new Set<string>();
+    try {
+      let cursor = null;
+      let hasNextPage = true;
+      while (hasNextPage) {
+        const res = await this.client.queryEvents({
+          query: { MoveEventType: `${this.config.peachPackageId}::peach_stream::StreamCreated` },
+          cursor,
+          limit: 50,
+        });
+        for (const evt of res.data) {
+          const parsed = evt.parsedJson as any;
+          if (parsed && parsed.stream_id) {
+            streamIds.add(parsed.stream_id);
+          }
+        }
+        hasNextPage = res.hasNextPage;
+        cursor = res.nextCursor as any;
+      }
+    } catch (err) {
+      this.logger.error({ err }, "Failed to discover streams from events");
+    }
+    return Array.from(streamIds);
   }
 }
